@@ -1,0 +1,70 @@
+name: infra
+
+on:
+  pull_request:
+    paths: ["infra/**", ".github/workflows/infra.yml"]
+  push:
+    branches: [main]
+    paths: ["infra/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+
+    # Floci emulates AWS locally, so this job provisions and destroys a full
+    # environment on every pull request with NO AWS ACCOUNT AND NO CREDENTIALS.
+    # The secret that cannot leak is the one the pipeline never holds.
+    services:
+      floci:
+        image: floci/floci:latest
+        ports: ["4566:4566"]
+
+    env:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_REGION: ap-southeast-1
+      AWS_ENDPOINT_URL: http://localhost:4566
+      TF_VAR_aws_endpoint_url: http://localhost:4566
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.10.5
+
+      - name: Format
+        run: terraform fmt -check -recursive infra/terraform
+
+      - name: Wait for Floci
+        run: |
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:4566/_localstack/health && exit 0
+            curl -sf http://localhost:4566/health && exit 0
+            sleep 2
+          done
+          echo "floci did not become ready" >&2; exit 1
+
+      - name: Validate and apply (dev)
+        working-directory: infra/terraform/envs/dev
+        run: |
+          terraform init -input=false
+          terraform validate
+          terraform plan  -input=false -out=tfplan
+          terraform apply -input=false -auto-approve tfplan
+
+      - name: Smoke-test the provisioned environment
+        working-directory: infra/terraform/envs/dev
+        run: |
+          terraform output -json > outputs.json
+          test -s outputs.json
+          # TODO: assert against the emulator, e.g. the RDS endpoint answers
+          # and the ECR repository exists.
+
+      - name: Destroy
+        if: always()
+        working-directory: infra/terraform/envs/dev
+        run: terraform destroy -input=false -auto-approve

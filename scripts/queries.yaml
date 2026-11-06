@@ -1,0 +1,22 @@
+# Evaluation set. Five queries, each with the document that should be cited.
+#
+# TODO: replace with questions your corpus actually answers. Good eval queries
+# are ones you already know the answer to and that fail in interesting ways —
+# an exact identifier (tests the keyword branch), a paraphrase (tests the
+# semantic branch), and something the corpus does NOT cover (tests that the
+# service declines rather than inventing an answer).
+
+- query: "Why did the Ollama context window overrun?"
+  expect_source: "ollama-gpu-tuning"
+
+- query: "How is split DNS configured?"
+  expect_source: "dns-single-answer"
+
+- query: "num_ctx"
+  expect_source: "ollama-gpu-tuning"
+
+- query: "What should I check first when the media stack stops responding?"
+  expect_source: "media-stack"
+
+- query: "What is the capital of France?"
+  expect_source: ""        # out of scope: expect a refusal, not a hallucination
