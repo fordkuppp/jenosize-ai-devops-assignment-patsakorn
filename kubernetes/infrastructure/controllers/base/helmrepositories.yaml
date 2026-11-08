@@ -25,15 +25,6 @@ spec:
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository
 metadata:
-  name: sloth
-  namespace: flux-system
-spec:
-  interval: 1h
-  url: https://slok.github.io/sloth
----
-apiVersion: source.toolkit.fluxcd.io/v1
-kind: HelmRepository
-metadata:
   name: cnpg
   namespace: flux-system
 spec:

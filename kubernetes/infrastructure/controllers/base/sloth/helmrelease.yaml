@@ -14,11 +14,15 @@ spec:
       namespace: monitoring
   chart:
     spec:
-      chart: sloth
-      version: "0.16.0"
+      # Vendored, not fetched: upstream publishes this chart only as a GitHub
+      # release asset, which is unreachable from some networks, and it has no
+      # OCI mirror. With wait: true on infra-controllers that made one flaky
+      # download capable of taking the whole cluster down — see
+      # kubernetes/charts/sloth/VENDORED.md.
+      chart: ./kubernetes/charts/sloth
       sourceRef:
-        kind: HelmRepository
-        name: sloth
+        kind: GitRepository
+        name: flux2-sync
         namespace: flux-system
   install:
     crds: Create
