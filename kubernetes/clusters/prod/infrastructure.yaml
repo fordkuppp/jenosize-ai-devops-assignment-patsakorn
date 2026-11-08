@@ -10,7 +10,12 @@ metadata:
   namespace: flux-system
 spec:
   interval: 10m
-  timeout: 15m
+  # Short on purpose. With wait: true, kustomize-controller will not start a
+  # new reconciliation until the in-flight one finishes, so this timeout is
+  # also how long a fix in git stays unreachable after a controller gets
+  # stuck. At 15m a one-line correction could not land for a quarter of an
+  # hour; the cluster was not broken, it was holding the lock.
+  timeout: 5m
   path: ./kubernetes/infrastructure/controllers/overlays/prod
   prune: true
   wait: true
