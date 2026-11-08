@@ -10,7 +10,14 @@ SHELL := /usr/bin/env bash
 
 TF_DEV  := infrastructure/terraform/envs/dev
 TF_PROD := infrastructure/terraform/envs/prod
-REGISTRY ?= ghcr.io/fordpatsakorn
+STAGES  := 1-cluster 2-platform
+
+# Four root modules share one provider download. Also a workaround with a
+# second purpose: the registry serves provider checksums from GitHub release
+# assets, which some networks time out on, so re-downloading per stage turns
+# one flaky dependency into four.
+export TF_PLUGIN_CACHE_DIR := $(CURDIR)/.terraform-cache
+REGISTRY ?= ghcr.io/fordkuppp
 TAG ?= v0.1.0
 
 export TF_VAR_sops_age_key = $(shell cat .secrets/age.agekey 2>/dev/null)
@@ -35,15 +42,25 @@ bootstrap: ## Generate the SOPS age key and pin GitHub's SSH host key
 
 .PHONY: up-dev up-prod
 up-dev: ## Create the dev cluster and bootstrap Flux
-	cd $(TF_DEV) && terraform init -input=false && terraform apply -auto-approve
+	@for s in $(STAGES); do \
+	  echo "==> $$s"; \
+	  terraform -chdir=$(TF_DEV)/$$s init -input=false >/dev/null && \
+	  terraform -chdir=$(TF_DEV)/$$s apply -auto-approve || exit 1; \
+	done
 up-prod: ## Create the prod cluster and bootstrap Flux
-	cd $(TF_PROD) && terraform init -input=false && terraform apply -auto-approve
+	@for s in $(STAGES); do \
+	  echo "==> $$s"; \
+	  terraform -chdir=$(TF_PROD)/$$s init -input=false >/dev/null && \
+	  terraform -chdir=$(TF_PROD)/$$s apply -auto-approve || exit 1; \
+	done
 
 .PHONY: down-dev down-prod
-down-dev: ## Destroy the dev cluster
-	cd $(TF_DEV) && terraform destroy -auto-approve
-down-prod: ## Destroy the prod cluster
-	cd $(TF_PROD) && terraform destroy -auto-approve
+down-dev: ## Destroy the dev cluster (reverse stage order)
+	-terraform -chdir=$(TF_DEV)/2-platform destroy -auto-approve
+	terraform -chdir=$(TF_DEV)/1-cluster destroy -auto-approve
+down-prod: ## Destroy the prod cluster (reverse stage order)
+	-terraform -chdir=$(TF_PROD)/2-platform destroy -auto-approve
+	terraform -chdir=$(TF_PROD)/1-cluster destroy -auto-approve
 
 .PHONY: images
 images: ## Build infra images and side-load them (kind has no registry)
@@ -57,8 +74,11 @@ images: ## Build infra images and side-load them (kind has no registry)
 
 .PHONY: validate
 validate: ## Everything CI checks: terraform, helm, kustomize
-	terraform -chdir=$(TF_DEV)  init -backend=false -input=false >/dev/null && terraform -chdir=$(TF_DEV)  validate
-	terraform -chdir=$(TF_PROD) init -backend=false -input=false >/dev/null && terraform -chdir=$(TF_PROD) validate
+	@for e in $(TF_DEV) $(TF_PROD); do for s in $(STAGES); do \
+	  echo "  tf     $$e/$$s"; \
+	  terraform -chdir=$$e/$$s init -backend=false -input=false >/dev/null && \
+	  terraform -chdir=$$e/$$s validate >/dev/null || exit 1; \
+	done; done
 	terraform fmt -check -recursive infrastructure
 	@# Linted against each ci/ values file rather than bare: the schema requires
 	@# target.name and target.selector, so default values are *meant* to fail.

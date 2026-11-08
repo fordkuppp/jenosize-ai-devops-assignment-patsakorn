@@ -3,7 +3,9 @@
 *.tfstate
 *.tfstate.*
 *.tfplan
-.terraform.lock.hcl
+# .terraform.lock.hcl IS committed — it pins provider versions *and* their
+# checksums, which is what makes `terraform init` reproducible. It is also
+# what lets init succeed without re-querying the registry.
 
 # Generated kubeconfigs — one per env, written by the kind provider
 **/.kube/
@@ -28,3 +30,6 @@ __pycache__/
 temp/
 
 # .sops.yaml IS committed — it holds only the age *public* key.
+
+# Shared provider cache — see TF_PLUGIN_CACHE_DIR in the Makefile.
+.terraform-cache/

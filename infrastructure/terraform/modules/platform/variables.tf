@@ -1,18 +1,3 @@
-variable "cluster_name" { type = string }
-variable "kubeconfig_path" { type = string }
-
-variable "worker_count" {
-  type    = number
-  default = 1
-}
-
-variable "port_mappings" {
-  type = list(object({
-    container_port = number
-    host_port      = number
-  }))
-}
-
 variable "git_url" { type = string }
 
 variable "git_branch" {

@@ -12,7 +12,7 @@ metadata:
   namespace: flux-system
 spec:
   interval: 10m
-  url: ssh://git@github.com/fordpatsakorn/jenosize-ai-devops-assignment-patsakorn.git
+  url: ssh://git@github.com/fordkuppp/jenosize-ai-devops-assignment-patsakorn.git
   ref:
     branch: main
   secretRef:
@@ -24,7 +24,7 @@ metadata:
   name: jenie-api
   namespace: flux-system
 spec:
-  image: ghcr.io/fordpatsakorn/jenie-api
+  image: ghcr.io/fordkuppp/jenie-api
   interval: 5m
 ---
 apiVersion: image.toolkit.fluxcd.io/v1beta2
@@ -45,7 +45,7 @@ metadata:
   name: jenie-indexer
   namespace: flux-system
 spec:
-  image: ghcr.io/fordpatsakorn/jenie-indexer
+  image: ghcr.io/fordkuppp/jenie-indexer
   interval: 5m
 ---
 apiVersion: image.toolkit.fluxcd.io/v1beta2

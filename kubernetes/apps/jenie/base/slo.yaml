@@ -37,7 +37,7 @@ spec:
           category: availability
         annotations:
           summary: /ask error budget is burning
-          runbook_url: https://github.com/fordpatsakorn/jenosize-ai-devops-assignment-patsakorn/blob/main/docs/runbooks/ask-availability.md
+          runbook_url: https://github.com/fordkuppp/jenosize-ai-devops-assignment-patsakorn/blob/main/docs/runbooks/ask-availability.md
         pageAlert:
           labels:
             severity: critical
@@ -71,7 +71,7 @@ spec:
           category: latency
         annotations:
           summary: /ask latency budget is burning
-          runbook_url: https://github.com/fordpatsakorn/jenosize-ai-devops-assignment-patsakorn/blob/main/docs/runbooks/ask-latency.md
+          runbook_url: https://github.com/fordkuppp/jenosize-ai-devops-assignment-patsakorn/blob/main/docs/runbooks/ask-latency.md
         pageAlert:
           labels:
             severity: critical
@@ -101,7 +101,7 @@ spec:
           category: latency
         annotations:
           summary: Retrieval latency budget is burning — index or pgvector degraded
-          runbook_url: https://github.com/fordpatsakorn/jenosize-ai-devops-assignment-patsakorn/blob/main/docs/runbooks/retrieval-latency.md
+          runbook_url: https://github.com/fordkuppp/jenosize-ai-devops-assignment-patsakorn/blob/main/docs/runbooks/retrieval-latency.md
         pageAlert:
           labels:
             severity: warning

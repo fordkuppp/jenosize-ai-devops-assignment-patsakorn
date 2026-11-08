@@ -1,3 +1,9 @@
+variable "namespace" {
+  description = "Created by bootstrap-secrets, not by this module."
+  type        = string
+  default     = "flux-system"
+}
+
 variable "git_url" {
   description = "Public HTTPS clone URL. Public on purpose: a reviewer can stand this up with no token, and Flux only needs read access to reconcile."
   type        = string

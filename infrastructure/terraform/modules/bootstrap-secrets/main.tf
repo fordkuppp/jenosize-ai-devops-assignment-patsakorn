@@ -6,6 +6,23 @@
 # `<cluster>-app` secret; duplicating that here would mean two sources of
 # truth for one password.
 
+# Terraform seeds secrets into flux-system before Flux is installed, so it has
+# to own the namespace too. Letting the Helm release create it is a trap: the
+# secrets module runs first by design — Flux must find its decryption key
+# already present rather than reconcile, fail, and retry.
+resource "kubernetes_namespace" "flux" {
+  metadata {
+    name = "flux-system"
+    labels = {
+      "app.kubernetes.io/managed-by" = "terraform"
+      "kubernetes.io/metadata.name"  = "flux-system"
+      # Flux's own kustomize-controller applies this label; setting it here
+      # keeps the namespace from flapping between managers.
+      "app.kubernetes.io/part-of" = "flux"
+    }
+  }
+}
+
 resource "kubernetes_namespace" "app" {
   metadata {
     name = var.app_namespace
@@ -21,7 +38,7 @@ resource "kubernetes_namespace" "app" {
 resource "kubernetes_secret" "sops_age" {
   metadata {
     name      = "sops-age"
-    namespace = "flux-system"
+    namespace = kubernetes_namespace.flux.metadata[0].name
   }
   data = {
     "age.agekey" = var.sops_age_key
@@ -34,7 +51,7 @@ resource "kubernetes_secret" "image_automation" {
 
   metadata {
     name      = "flux-image-automation"
-    namespace = "flux-system"
+    namespace = kubernetes_namespace.flux.metadata[0].name
   }
   data = {
     identity      = var.image_automation_deploy_key

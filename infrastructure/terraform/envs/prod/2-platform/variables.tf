@@ -1,6 +1,6 @@
 variable "git_url" {
   type    = string
-  default = "https://github.com/fordpatsakorn/jenosize-ai-devops-assignment-patsakorn.git"
+  default = "https://github.com/fordkuppp/jenosize-ai-devops-assignment-patsakorn.git"
 }
 
 variable "git_branch" {

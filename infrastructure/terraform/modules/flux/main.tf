@@ -7,12 +7,18 @@
 # declaring the sync separately gives the same end state, read-only, with no
 # credential at all.
 resource "helm_release" "flux" {
-  name             = "flux2"
-  repository       = "https://fluxcd-community.github.io/helm-charts"
-  chart            = "flux2"
-  version          = var.chart_version
-  namespace        = "flux-system"
-  create_namespace = true
+  name = "flux2"
+  # OCI rather than the HTTP repo. The HTTP index points at GitHub release
+  # assets, which are unreachable from some networks (observed: a proxy
+  # returning 504 for github.com/*/releases/download/*). OCI is also the
+  # better default regardless: immutable digests, no index to go stale.
+  repository = "oci://ghcr.io/fluxcd-community/charts"
+  chart      = "flux2"
+  version    = var.chart_version
+  namespace  = var.namespace
+  # false: bootstrap-secrets created it, because the decryption key has to be
+  # in place before the controllers start reconciling.
+  create_namespace = false
 
   # Terraform's job ends when the controllers are up. Everything after this
   # point is Flux's, and waiting on it here would make `terraform apply` block
@@ -24,10 +30,10 @@ resource "helm_release" "flux" {
 
 resource "helm_release" "sync" {
   name       = "flux2-sync"
-  repository = "https://fluxcd-community.github.io/helm-charts"
+  repository = "oci://ghcr.io/fluxcd-community/charts"
   chart      = "flux2-sync"
   version    = var.sync_chart_version
-  namespace  = "flux-system"
+  namespace  = var.namespace
 
   depends_on = [helm_release.flux]
 
