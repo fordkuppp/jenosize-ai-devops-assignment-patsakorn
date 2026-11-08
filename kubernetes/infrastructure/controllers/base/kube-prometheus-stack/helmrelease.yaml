@@ -72,6 +72,17 @@ spec:
     # now while there are zero such rules, not during an incident.
     grafana:
       enabled: true
+      sidecar:
+        dashboards:
+          enabled: true
+          # ALL, not the release namespace. A service owns its own dashboard
+          # and ships it beside its manifests; requiring every team to write
+          # into the monitoring namespace makes the platform a bottleneck.
+          searchNamespace: ALL
+          label: grafana_dashboard
+          folderAnnotation: grafana_folder
+          provider:
+            foldersFromFilesStructure: true
 
     prometheus:
       prometheusSpec:

@@ -13,3 +13,17 @@ resources:
   - policy.yaml
   - slo.yaml
   - prometheusrule.yaml
+
+# The dashboard ships as a labelled ConfigMap; Grafana's sidecar discovers it.
+# Generated from the JSON file rather than inlined so it stays readable in git
+# and can be round-tripped through Grafana's export.
+configMapGenerator:
+  - name: jenie-dashboard
+    files:
+      - dashboards/jenie.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+      # Content-hash suffixes would orphan a ConfigMap on every edit, since
+      # the sidecar keys on the label rather than the name.
+      disableNameSuffixHash: true
