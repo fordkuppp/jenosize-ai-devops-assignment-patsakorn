@@ -278,6 +278,11 @@ jobs:
     name: e2e · platform installs
     runs-on: ubuntu-latest
     needs: [validate]
+    # Push only. It needs a GitRepository pointing at a ref Flux can clone,
+    # and a pull_request SHA is a merge commit that exists only as
+    # refs/pull/N/merge — not something a GitRepository can track. Pull
+    # requests still get every other job.
+    if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
       - uses: azure/setup-helm@v4
@@ -308,6 +313,20 @@ jobs:
         run: |
           flux install --components-extra=image-reflector-controller,image-automation-controller
           kubectl -n flux-system wait --for=condition=available --timeout=180s deploy --all
+
+      - name: create the git source
+        # The vendored Sloth chart is referenced through GitRepository
+        # flux2-sync, so without a source its HelmRelease cannot resolve —
+        # vendoring removed a flaky download and added this dependency.
+        # Creating it also makes the job closer to the real path: charts
+        # come from the same place the cluster would get them.
+        run: |
+          flux create source git flux2-sync \
+            --url=https://github.com/${{ github.repository }} \
+            --branch=${{ github.ref_name }} \
+            --interval=1m \
+            --namespace=flux-system
+          kubectl -n flux-system wait --for=condition=ready --timeout=180s gitrepository/flux2-sync
 
       - name: apply the controllers layer
         run: kustomize build kubernetes/infrastructure/controllers/overlays/dev | kubectl apply -f -
