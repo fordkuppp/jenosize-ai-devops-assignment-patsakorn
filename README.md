@@ -139,11 +139,23 @@ that is sometimes wrong.
 
 ### Dashboards
 
+Grafana and Prometheus are not routed through the gateway — exposing an
+admin console on port 80 is not a thing to ship.
+
 ```sh
-kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80
-# http://localhost:3000 — admin / prom-operator
+eval "$(make kubeconfig ENV=dev)"
+make grafana      # port-forwards and prints the generated password
+```
+
+The dashboard is **Jenie Helpdesk AI** (`/d/jenie-rag`): service health,
+error budget, retrieval-versus-generation latency, answer outcomes,
+best-match similarity, token cost and index freshness. It ships as a
+labelled ConfigMap beside the application manifests, so the service owns its
+own dashboard rather than the monitoring namespace owning it.
+
+```sh
 kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:9090
-# http://localhost:9090/alerts
+# http://localhost:9090/alerts  — the Sloth-generated burn-rate rules
 ```
 
 ### Production

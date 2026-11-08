@@ -269,6 +269,13 @@ logs: guard ## Tail a controller: make logs C=source-controller [ENV=prod]
 	  *) echo "unknown component '$(C)'"; exit 1 ;; \
 	esac
 
+.PHONY: grafana
+grafana: guard ## Port-forward Grafana and print the generated admin password
+	@echo "user: $$(kubectl -n monitoring get secret kube-prometheus-stack-grafana -o jsonpath='{.data.admin-user}' | base64 -d)"
+	@echo "pass: $$(kubectl -n monitoring get secret kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' | base64 -d)"
+	@echo "open: http://localhost:3000/d/jenie-rag"
+	kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80
+
 .PHONY: canary
 canary: guard ## Watch canary rollouts (prod runs the progressive strategy)
 	kubectl -n jenie get canary -w
