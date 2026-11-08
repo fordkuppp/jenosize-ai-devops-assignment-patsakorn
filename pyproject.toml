@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jenie"
+version = "0.1.0"
+description = "Jenie Helpdesk AI — RAG over an operations knowledge base"
+requires-python = ">=3.12"
+
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.7",
+    # Direct SQL rather than a RAG framework. Hybrid retrieval is one query;
+    # a framework here would be more code to read, not less.
+    "psycopg[binary,pool]>=3.2",
+    "pgvector>=0.3",
+    # ONNX on CPU — no torch, no GPU, ~130MB model. CI must not need either.
+    "fastembed>=0.5",
+    "httpx>=0.28",
+    "prometheus-client>=0.21",
+    "prometheus-fastapi-instrumentator>=7.0",
+    "python-json-logger>=3.2",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.9",
+    "pytest>=8.3",
+    "httpx>=0.28",
+]
+
+[tool.setuptools]
+# Only the shared library is installable. api/ and worker/ are entrypoints
+# that import it; they are copied into their images, not packaged.
+packages = ["jenie"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

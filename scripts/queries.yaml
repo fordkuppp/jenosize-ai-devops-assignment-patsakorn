@@ -1,0 +1,39 @@
+# Evaluation set.
+#
+# `expect_source` is the document that must appear in the cited sources — a
+# retrieval assertion, not a text match against the answer. Checking generated
+# prose would test the model; checking the citation tests the part the
+# platform is responsible for.
+#
+# The last case expects *no* sources. A service that cannot decline is worse
+# than one that is sometimes wrong, and refusal is the single most commonly
+# omitted test in a RAG evaluation.
+
+- id: external-traffic-policy
+  query: Why is externalTrafficPolicy set to Cluster on the Envoy service?
+  expect_source: gateway-and-routing.md
+
+- id: pgvector-extension
+  query: Which CloudNativePG init hook creates the vector extension, and why does the other one fail?
+  expect_source: database.md
+
+- id: canary-gates
+  query: What metrics gate a production canary release?
+  expect_source: progressive-delivery.md
+
+- id: slo-buckets
+  query: Why must an SLO latency threshold match a histogram bucket boundary?
+  expect_source: observability.md
+
+- id: backup-gap
+  query: What does the backup strategy not protect against?
+  expect_source: backup-and-recovery.md
+
+- id: secrets-ownership
+  query: Who generates the PostgreSQL password?
+  expect_source: secrets.md
+
+# Out of corpus. Correct behaviour is to answer nothing and cite nothing.
+- id: refusal-out-of-corpus
+  query: What is the capital of France?
+  expect_source: null

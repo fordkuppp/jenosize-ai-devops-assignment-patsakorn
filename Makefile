@@ -115,14 +115,31 @@ down-prod: ## Destroy the prod cluster
 	$(call teardown,$(TF_PROD))
 
 .PHONY: images
-images: ## Build infra images and side-load them (kind has no registry)
-	@# Only the operand image for now. The api and indexer builds return when
-	@# the application comes back out of temp/ — see docs/decisions.md.
+images: ## Build images and side-load them (kind has no registry)
+	docker build -t $(REGISTRY)/jenie-api:$(TAG) -f api/Dockerfile .
+	docker build -t $(REGISTRY)/jenie-indexer:$(TAG) -f worker/Dockerfile .
 	docker build -t $(REGISTRY)/postgres-pgvector:17 infrastructure/images/postgres-pgvector
 	@for c in jenie-dev jenie-prod; do \
 	  kind get clusters | grep -qx $$c || continue; \
-	  kind load docker-image --name $$c $(REGISTRY)/postgres-pgvector:17; \
+	  echo "==> loading into $$c"; \
+	  kind load docker-image --name $$c \
+	    $(REGISTRY)/jenie-api:$(TAG) \
+	    $(REGISTRY)/jenie-indexer:$(TAG) \
+	    $(REGISTRY)/postgres-pgvector:17; \
 	done
+
+.PHONY: index eval
+index: guard ## Run the indexer as a one-off Job against ENV
+	kubectl -n jenie delete job jenie-indexer --ignore-not-found
+	kubectl -n jenie create job jenie-indexer --from=cronjob/jenie-indexer 2>/dev/null \
+	  || kubectl -n jenie apply -k kubernetes/apps/jenie/overlays/$(ENV)
+
+eval: guard ## Run the evaluation against the deployed service
+	@echo "port-forwarding to the service..."
+	@kubectl -n jenie port-forward svc/jenie-api 8099:8000 >/dev/null 2>&1 & \
+	  pid=$$!; sleep 3; \
+	  .venv/bin/python scripts/eval.py --url http://127.0.0.1:8099; rc=$$?; \
+	  kill $$pid 2>/dev/null; exit $$rc
 
 .PHONY: validate
 validate: ## Everything CI checks: terraform, helm, kustomize

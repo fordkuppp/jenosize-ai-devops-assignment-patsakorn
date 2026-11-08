@@ -24,12 +24,7 @@ metadata:
   name: jenie-api
   namespace: flux-system
 spec:
-  # PLACEHOLDER, tracking the same image api.yaml runs. Pointing this at an
-  # image that does not exist yet would make automation permanently unhealthy
-  # and prove nothing; against podinfo the whole loop is observable — policy
-  # picks the newest semver, automation commits the tag back to git, Flux
-  # deploys it.
-  image: ghcr.io/stefanprodan/podinfo
+  image: ghcr.io/fordkuppp/jenie-api
   interval: 5m
 ---
 apiVersion: image.toolkit.fluxcd.io/v1
@@ -42,7 +37,7 @@ spec:
     name: jenie-api
   policy:
     semver:
-      range: ">=6.0.0"
+      range: ">=0.1.0"
 ---
 apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImageRepository
@@ -50,8 +45,7 @@ metadata:
   name: jenie-indexer
   namespace: flux-system
 spec:
-  # PLACEHOLDER — see above.
-  image: docker.io/library/busybox
+  image: ghcr.io/fordkuppp/jenie-indexer
   interval: 5m
 ---
 apiVersion: image.toolkit.fluxcd.io/v1
@@ -64,7 +58,7 @@ spec:
     name: jenie-indexer
   policy:
     semver:
-      range: ">=1.36.0"
+      range: ">=0.1.0"
 ---
 apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImageUpdateAutomation

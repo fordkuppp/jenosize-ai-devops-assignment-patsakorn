@@ -25,20 +25,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: indexer
-          # PLACEHOLDER — see api.yaml. Runs to completion so the Job
-          # succeeds and the apps Kustomization can go Ready; the real
-          # indexer chunks, embeds and upserts into pgvector.
-          #   image: ghcr.io/fordkuppp/jenie-indexer:v0.1.0 # {"$imagepolicy": "flux-system:jenie-indexer"}
-          image: busybox:1.37 # {"$imagepolicy": "flux-system:jenie-indexer"}
-          command:
-            - sh
-            - -c
-            - |
-              echo "placeholder indexer"
-              echo "  would read data/*.md, chunk, embed, upsert into pgvector"
-              echo "  PGHOST=$PGHOST PGDATABASE=$PGDATABASE"
-              sleep 3
-              echo "done"
+          image: ghcr.io/fordkuppp/jenie-indexer:v0.1.0 # {"$imagepolicy": "flux-system:jenie-indexer"}
           envFrom:
             - configMapRef:
                 name: jenie-config
