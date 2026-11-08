@@ -34,7 +34,7 @@ spec:
     route:
       enabled: true
       gateway:
-        name: jenie
+        name: external
         namespace: envoy-gateway-system
         sectionName: http
     networkPolicy:

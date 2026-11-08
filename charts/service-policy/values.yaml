@@ -49,7 +49,7 @@ target:
 route:
   enabled: true
   gateway:
-    name: jenie
+    name: external
     namespace: envoy-gateway-system
     sectionName: http
   hostnames: []

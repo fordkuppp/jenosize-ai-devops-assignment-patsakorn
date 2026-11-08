@@ -9,7 +9,7 @@ target:
     app.kubernetes.io/name: jenie-api
 route:
   gateway:
-    name: jenie
+    name: external
     namespace: envoy-gateway-system
   hostnames:
     - jenie.local

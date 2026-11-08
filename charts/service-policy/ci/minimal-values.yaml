@@ -5,7 +5,7 @@ target:
     app.kubernetes.io/name: demo-api
 route:
   gateway:
-    name: demo
+    name: external
     namespace: envoy-gateway-system
 networkPolicy:
   enabled: false
