@@ -40,8 +40,10 @@ spec:
       service:
         port: 8000
         targetPort: http
+      # Not app.kubernetes.io/name — Flagger rewrites that one. See the
+      # chart values for why.
       selector:
-        app.kubernetes.io/name: jenie-api
+        app.kubernetes.io/part-of: jenie
     route:
       enabled: true
       gateway:

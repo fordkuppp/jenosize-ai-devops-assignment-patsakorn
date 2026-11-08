@@ -32,10 +32,17 @@ target:
     port: 8000
     targetPort: http
 
-  # Pod selector for NetworkPolicy and PodDisruptionBudget. These select pods
-  # directly rather than through the workload, so they need labels, not a name.
+  # Pod labels for NetworkPolicy, PodDisruptionBudget and the PodMonitor.
+  # These select pods directly rather than through the workload.
+  #
+  # It must NOT be the label in the Deployment's spec.selector. Flagger
+  # rewrites that one to <target>-primary and <target>-canary when it takes
+  # over, after which anything selecting the original value matches zero
+  # pods — and a NetworkPolicy matching zero pods denies nothing, a PDB
+  # protects nothing, and a PodMonitor scrapes nothing. All three fail
+  # silently and report healthy.
   selector: {}
-    # app.kubernetes.io/name: jenie-api
+    # app.kubernetes.io/part-of: jenie
 
 
 # ─────────────────────────────────────────────────────────────────────────────

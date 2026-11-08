@@ -44,6 +44,14 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: jenie-api
+        # Flagger rewrites the label used in spec.selector to
+        # <target>-primary / <target>-canary when it takes over the
+        # Deployment. Anything selecting on app.kubernetes.io/name then
+        # matches nothing — and a NetworkPolicy matching no pods does not
+        # deny traffic, it simply does not apply. This label is not in the
+        # selector, so Flagger copies it verbatim to both variants; the
+        # PodMonitor, NetworkPolicy and PodDisruptionBudget all use it.
+        app.kubernetes.io/part-of: jenie
     spec:
       serviceAccountName: jenie-api
       automountServiceAccountToken: false
