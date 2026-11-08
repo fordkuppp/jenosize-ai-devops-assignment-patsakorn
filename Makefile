@@ -45,9 +45,19 @@ export TF_PLUGIN_CACHE_DIR := $(CURDIR)/.terraform-cache
 REGISTRY ?= ghcr.io/fordkuppp
 TAG ?= v0.1.0
 
-export TF_VAR_sops_age_key = $(shell cat .secrets/age.agekey 2>/dev/null)
-export TF_VAR_git_known_hosts = $(shell cat .secrets/known_hosts 2>/dev/null)
-export TF_VAR_image_automation_deploy_key = $(shell cat .secrets/deploy_key 2>/dev/null)
+# $(file <...), not $(shell cat ...).
+#
+# $(shell) collapses newlines into spaces. For a multi-line secret that is
+# silent corruption: the age private key arrived in the cluster as a single
+# line, Terraform stored it faithfully, and SOPS failed with "failed to load
+# age identities" — pointing at everything except the Makefile.
+AGE_KEY_FILE   := .secrets/age.agekey
+KNOWN_HOSTS    := .secrets/known_hosts
+DEPLOY_KEY     := .secrets/deploy_key
+
+export TF_VAR_sops_age_key = $(if $(wildcard $(AGE_KEY_FILE)),$(file < $(AGE_KEY_FILE)),)
+export TF_VAR_git_known_hosts = $(if $(wildcard $(KNOWN_HOSTS)),$(file < $(KNOWN_HOSTS)),)
+export TF_VAR_image_automation_deploy_key = $(if $(wildcard $(DEPLOY_KEY)),$(file < $(DEPLOY_KEY)),)
 
 .PHONY: help
 help:
