@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     pgpassword: str = ""
     pgdatabase: str = "jenie"
     database_url: str | None = None
+    pg_pool_max: int = 8
 
     # ── embeddings ──────────────────────────────────────────────────────
     # ONNX on CPU. 384 dimensions, ~130MB. The dimension is part of the

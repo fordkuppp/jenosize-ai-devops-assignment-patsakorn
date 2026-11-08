@@ -47,11 +47,12 @@ async def lifespan(app: FastAPI):
     # request a multi-second outlier and pollute the latency SLO. Readiness
     # stays false until this finishes, which is exactly what it is for.
     embed.warm(settings)
-    app.state.conn = store.connect(settings)
-    store.ensure_schema(app.state.conn, settings)
+    app.state.pool = store.make_pool(settings)
+    with app.state.pool.connection() as conn:
+        store.ensure_schema(conn, settings)
     log.info("startup complete", extra={"model": settings.llm_model})
     yield
-    app.state.conn.close()
+    app.state.pool.close()
 
 
 app = FastAPI(title="Jenie Helpdesk AI", version="0.1.0", lifespan=lifespan)
@@ -77,7 +78,8 @@ def healthz() -> dict[str, str]:
 @app.get("/readyz")
 def readyz() -> dict[str, object]:
     try:
-        n = store.count(app.state.conn)
+        with app.state.pool.connection() as conn:
+            n = store.count(conn)
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"database unavailable: {exc}") from exc
     if n == 0:
@@ -90,7 +92,8 @@ def readyz() -> dict[str, object]:
 
 @app.post("/ask", response_model=AskResponse)
 def ask(req: AskRequest) -> AskResponse:
-    answer = rag.ask(settings, app.state.conn, req.query)
+    with app.state.pool.connection() as conn:
+        answer = rag.ask(settings, conn, req.query)
     log.info(
         "ask",
         extra={

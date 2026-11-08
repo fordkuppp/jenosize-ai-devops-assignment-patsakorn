@@ -21,6 +21,7 @@ from dataclasses import dataclass
 
 import psycopg
 from pgvector.psycopg import register_vector
+from psycopg_pool import ConnectionPool
 
 from jenie.config import Settings
 
@@ -78,18 +79,49 @@ class Hit:
     similarity: float
 
 
+def _prepare(conn: psycopg.Connection) -> None:
+    """Run on every connection the pool hands out, including replacements."""
+    # The extension has to exist before the type can be registered with the
+    # adapter — registering first fails with "vector type not found in the
+    # database", which reads like a driver problem rather than an ordering
+    # one. In the cluster CNPG has already created it via
+    # postInitApplicationSQL; this makes a bare Postgres work too.
+    with contextlib.suppress(psycopg.errors.InsufficientPrivilege):
+        conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    register_vector(conn)
+
+
+def make_pool(cfg: Settings) -> ConnectionPool:
+    """A pool, not a long-lived connection.
+
+    A single connection opened at startup dies the first time PostgreSQL
+    restarts or fails over, and nothing reopens it: readiness goes 503 and
+    stays there until the pod is killed. With a three-instance cluster that
+    fails over by design, that is not an edge case.
+
+    `check` validates a connection before handing it out, so a replica
+    promotion costs one discarded connection rather than an outage.
+    """
+    return ConnectionPool(
+        cfg.dsn,
+        min_size=1,
+        max_size=cfg.pg_pool_max,
+        kwargs={"autocommit": True},
+        configure=_prepare,
+        check=ConnectionPool.check_connection,
+        open=True,
+    )
+
+
 def connect(cfg: Settings) -> psycopg.Connection:
+    """Single connection, for the indexer — a job that runs once and exits."""
     conn = psycopg.connect(cfg.dsn, autocommit=True)
     # The extension has to exist before the type can be registered with the
     # adapter — registering first fails with "vector type not found in the
     # database", which reads like a driver problem rather than an ordering
     # one. In the cluster CNPG has already created it via
     # postInitApplicationSQL; this makes a bare Postgres work too.
-    # Not being the owner is fine if the operator already created it; if it
-    # did not, register_vector below fails with a clear message.
-    with contextlib.suppress(psycopg.errors.InsufficientPrivilege):
-        conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
-    register_vector(conn)
+    _prepare(conn)
     return conn
 
 
