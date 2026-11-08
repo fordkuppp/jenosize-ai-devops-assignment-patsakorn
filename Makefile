@@ -63,9 +63,9 @@ validate: ## Everything CI checks: terraform, helm, kustomize
 	@# Linted against each ci/ values file rather than bare: the schema requires
 	@# target.name and target.selector, so default values are *meant* to fail.
 	@# That is the convention ci/ exists for (chart-testing does the same).
-	@for f in charts/service-policy/ci/*.yaml; do \
-	  echo "  lint   $$f"; helm lint charts/service-policy -f $$f --quiet || exit 1; \
-	  helm template t charts/service-policy -f $$f -n jenie >/dev/null || exit 1; \
+	@for f in kubernetes/charts/service-policy/ci/*.yaml; do \
+	  echo "  lint   $$f"; helm lint kubernetes/charts/service-policy -f $$f --quiet || exit 1; \
+	  helm template t kubernetes/charts/service-policy -f $$f -n jenie >/dev/null || exit 1; \
 	done
 	@for d in kubernetes/infrastructure/controllers/overlays/dev \
 	          kubernetes/infrastructure/controllers/overlays/prod \

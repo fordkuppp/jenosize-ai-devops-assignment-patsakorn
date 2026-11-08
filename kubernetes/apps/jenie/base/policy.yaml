@@ -8,7 +8,11 @@ spec:
   interval: 30m
   chart:
     spec:
-      chart: ./charts/service-policy
+      # Path is relative to the repo root, not to this file. The chart lives
+      # under kubernetes/ but no Kustomization points at kubernetes/charts,
+      # so Flux never tries to apply it as manifests — only helm-controller
+      # reads it, through this reference.
+      chart: ./kubernetes/charts/service-policy
       sourceRef:
         kind: GitRepository
         name: flux2-sync

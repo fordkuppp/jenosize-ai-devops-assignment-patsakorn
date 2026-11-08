@@ -76,9 +76,9 @@ jobs:
               -schema-location default -schema-location "$SCHEMA"
             echo "::endgroup::"
           done
-          for f in charts/service-policy/ci/*.yaml; do
+          for f in kubernetes/charts/service-policy/ci/*.yaml; do
             echo "::group::$f"
-            helm template t charts/service-policy -f "$f" -n jenie | kubeconform -strict -summary \
+            helm template t kubernetes/charts/service-policy -f "$f" -n jenie | kubeconform -strict -summary \
               -schema-location default -schema-location "$SCHEMA"
             echo "::endgroup::"
           done
