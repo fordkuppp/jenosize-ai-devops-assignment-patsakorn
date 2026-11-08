@@ -167,6 +167,14 @@ validate: ## Everything CI checks: terraform, helm, kustomize
 
 # Every cluster-facing target depends on this. It fails loudly rather than
 # falling through to the ambient context.
+# SOPS-encrypted documents cannot be dry-run: they carry a top-level `sops`
+# key that no schema declares, and the API server rejects them with
+# "unknown field". Flux decrypts them in the kustomize-controller before
+# applying, so what the server eventually sees is a normal Secret. Dropping
+# them here checks everything that is checkable; decrypting instead would
+# mean handling plaintext secrets in a validation path.
+STRIP_SOPS := python3 -c "import sys,yaml; ds=[d for d in yaml.safe_load_all(sys.stdin) if d and 'sops' not in d]; print(yaml.safe_dump_all(ds))"
+
 .PHONY: verify
 verify: guard ## Server-side dry-run every overlay against the ENV cluster
 	@# `validate` renders and schema-checks; this asks the API server. Only
@@ -178,7 +186,7 @@ verify: guard ## Server-side dry-run every overlay against the ENV cluster
 	          kubernetes/apps/jenie/overlays/$(ENV) \
 	          kubernetes/apps/jenie/image-automation; do \
 	  printf '  %-52s ' "$$d"; \
-	  out=$$(kustomize build "$$d" | kubectl apply --dry-run=server -f - 2>&1); \
+	  out=$$(kustomize build "$$d" | $(STRIP_SOPS) | kubectl apply --dry-run=server -f - 2>&1); \
 	  if echo "$$out" | grep -qiE 'error|no matches'; then \
 	    echo FAIL; echo "$$out" | grep -iE 'error|no matches' | head -3 | sed 's/^/      /'; exit 1; \
 	  else echo "ok ($$(echo "$$out" | wc -l) objects)"; fi; \
