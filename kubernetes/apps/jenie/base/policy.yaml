@@ -13,6 +13,13 @@ spec:
       # so Flux never tries to apply it as manifests — only helm-controller
       # reads it, through this reference.
       chart: ./kubernetes/charts/service-policy
+      # Track the git revision, not the chart version. The default for a
+      # GitRepository source is Revision=ChartVersion, so editing a chart
+      # without bumping Chart.yaml produces no new artifact and the fix is
+      # never pulled — the release sits on stale content while git looks
+      # correct. Bumping the version is still good practice; this makes
+      # forgetting it harmless rather than silently broken.
+      reconcileStrategy: Revision
       sourceRef:
         kind: GitRepository
         name: flux2-sync
