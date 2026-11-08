@@ -145,6 +145,15 @@ strategy:
     # The application's own metrics can distinguish canary pods by name, so
     # the consuming release supplies templates that do. Chart default is
     # empty: a gate that cannot see the canary is worse than no gate.
+    # Each entry needs a templateRef unless it is a Flagger built-in.
+    # Without one Flagger looks the name up among its built-ins, does not
+    # find it, and fails the check — the gate looks configured and does
+    # nothing. Example:
+    #
+    #   - name: canary-success-rate
+    #     templateRef: {name: canary-success-rate, namespace: jenie}
+    #     thresholdRange: {min: 99}
+    #     interval: 1m
     metrics: []
 
     # Mandatory, not optional. With no synthetic traffic during analysis there

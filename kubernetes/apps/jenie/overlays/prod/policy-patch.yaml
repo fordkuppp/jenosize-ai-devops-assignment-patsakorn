@@ -24,11 +24,22 @@ spec:
       analysis:
         interval: 30s
         threshold: 3
+        # templateRef is required for anything that is not a Flagger
+        # built-in. Without it Flagger resolves the name against its own
+        # built-ins, finds nothing, and fails the check with "no usable
+        # metrics template and query were configured" — a custom gate that
+        # looks configured and is inert.
         metrics:
           - name: canary-success-rate
+            templateRef:
+              name: canary-success-rate
+              namespace: jenie
             thresholdRange: { min: 99 }
             interval: 1m
           - name: canary-latency-p95
+            templateRef:
+              name: canary-latency-p95
+              namespace: jenie
             thresholdRange: { max: 3 }
             interval: 1m
           # The AI-aware gate. A release that starts refusing questions it
@@ -36,6 +47,9 @@ spec:
           # above. This is the one that catches a bad prompt or a broken
           # index, and no HTTP signal can.
           - name: rag-refusal-rate
+            templateRef:
+              name: rag-refusal-rate
+              namespace: jenie
             thresholdRange: { max: 40 }
             interval: 1m
       metricTemplates:
