@@ -7,102 +7,78 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_PREFIX: ${{ github.repository }}
-
+# Everything this pipeline does is static. Nothing here needs a cloud
+# account, a cluster, or a GPU — which is why it can run on a fork.
 jobs:
   secrets:
+    name: secret scan
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0          # gitleaks scans full history
+          # gitleaks needs history: a secret removed in a later commit is
+          # still a leaked secret.
+          fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  lint:
+  validate:
+    name: terraform · helm · kustomize
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: hashicorp/setup-terraform@v3
         with:
-          python-version: "3.12"
-      - run: pip install ruff
-      - run: ruff check --output-format=github .
-      - run: ruff format --check .
+          terraform_version: 1.15.9
+          terraform_wrapper: false
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.19.0
+      - name: install kustomize
+        run: |
+          curl -sSL "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+      - name: validate
+        run: make validate
 
-  test:
+  conform:
+    name: schema check rendered manifests
     runs-on: ubuntu-latest
+    needs: validate
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: azure/setup-helm@v4
         with:
-          python-version: "3.12"
-          cache: pip
-      - run: pip install -e ".[dev]"
-      # LLM_BASE_URL is unset on purpose: tests run against the deterministic
-      # stub, so CI needs no model and no GPU. testcontainers provides postgres.
-      - run: pytest -q
-
-  build:
-    runs-on: ubuntu-latest
-    needs: [secrets, lint, test]
-    strategy:
-      matrix:
-        component: [api, worker]
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/setup-buildx-action@v3
-
-      - name: Image tags
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.component }}
-          tags: |
-            type=sha,format=long
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-
-      - name: Build (load locally so we can scan before pushing)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ${{ matrix.component }}/Dockerfile
-          load: true
-          tags: scan-target:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Vulnerability scan
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          image-ref: scan-target:${{ github.sha }}
-          format: table
-          exit-code: "1"                 # fail the build, do not just report
-          ignore-unfixed: true
-          severity: HIGH,CRITICAL
-
-      - name: Log in to GHCR
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Push
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ${{ matrix.component }}/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
+          version: v3.19.0
+      - name: install kustomize + kubeconform
+        run: |
+          curl -sSL "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+          curl -sSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz \
+            | tar xz -C /tmp && sudo mv /tmp/kubeconform /usr/local/bin/
+      - name: kubeconform
+        run: |
+          # CRDs (Flagger, CNPG, Sloth, Gateway API, Prometheus Operator) are
+          # not in the stock schema set, so point kubeconform at the
+          # community catalogue rather than skipping them — skipping would
+          # mean the custom resources, which is most of this repo, go
+          # unchecked.
+          SCHEMA='https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+          for d in kubernetes/infrastructure/controllers/overlays/dev \
+                   kubernetes/infrastructure/controllers/overlays/prod \
+                   kubernetes/infrastructure/configs \
+                   kubernetes/apps/jenie/overlays/dev \
+                   kubernetes/apps/jenie/overlays/prod; do
+            echo "::group::$d"
+            kustomize build "$d" | kubeconform -strict -summary \
+              -schema-location default -schema-location "$SCHEMA"
+            echo "::endgroup::"
+          done
+          for f in charts/service-policy/ci/*.yaml; do
+            echo "::group::$f"
+            helm template t charts/service-policy -f "$f" -n jenie | kubeconform -strict -summary \
+              -schema-location default -schema-location "$SCHEMA"
+            echo "::endgroup::"
+          done

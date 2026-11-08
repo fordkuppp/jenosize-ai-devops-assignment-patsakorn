@@ -26,3 +26,5 @@ __pycache__/
 # Holding area while the infra layer is built. Nothing here ships —
 # empty it or wire it back in before submitting.
 temp/
+
+# .sops.yaml IS committed — it holds only the age *public* key.

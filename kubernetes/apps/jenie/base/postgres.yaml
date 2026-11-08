@@ -7,7 +7,7 @@ metadata:
 spec:
   instances: 1
   # Stock CNPG images do not ship pgvector, so this is built from one.
-  # See images/postgres-pgvector/Dockerfile.
+  # See infrastructure/images/postgres-pgvector/Dockerfile.
   imageName: ghcr.io/fordpatsakorn/postgres-pgvector:17
   storage:
     size: 2Gi

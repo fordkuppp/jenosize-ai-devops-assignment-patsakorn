@@ -1,9 +1,9 @@
 output "kubeconfig_path" {
-  value = module.cluster.kubeconfig_path
+  value = module.stack.kubeconfig_path
 }
 
 output "context" {
-  value = module.cluster.context_name
+  value = module.stack.context
 }
 
 output "gateway_url" {

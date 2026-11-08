@@ -72,7 +72,6 @@ rateLimit:
   type: Local               # Local (per-proxy) | Global (needs a rate-limit svc)
   requests: 60
   unit: Minute
-  burst: 10
 
 circuitBreaker:
   enabled: true
@@ -94,8 +93,10 @@ networkPolicy:
   allowFrom:
     - namespace: envoy-gateway-system
     - namespace: monitoring
+  # Egress is default-deny once this is enabled, so every dependency has to
+  # be named. Example shape only — the consuming release supplies its own.
   allowTo: []
-    # - podSelector: {cnpg.io/cluster: jenie-pg}
+    # - podSelector: {app.kubernetes.io/name: some-database}
     #   ports: [5432]
 
 

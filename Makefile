@@ -26,7 +26,11 @@ bootstrap: ## Generate the SOPS age key and pin GitHub's SSH host key
 	@mkdir -p .secrets
 	@test -f .secrets/age.agekey || age-keygen -o .secrets/age.agekey
 	@ssh-keyscan github.com > .secrets/known_hosts 2>/dev/null
-	@echo "age public key (put this in .sops.yaml):"
+	@grep -q 'age:' .sops.yaml 2>/dev/null || { \
+	  key=$$(grep 'public key' .secrets/age.agekey | awk '{print $$NF}'); \
+	  printf 'creation_rules:\n  - path_regex: kubernetes/.*\\.sops\\.ya?ml$$\n    encrypted_regex: ^(data|stringData)$$\n    age: %s\n' "$$key" > .sops.yaml; \
+	  echo "wrote .sops.yaml — commit it, it holds only the public key"; \
+	}
 	@grep 'public key' .secrets/age.agekey
 
 .PHONY: up-dev up-prod
@@ -45,7 +49,7 @@ down-prod: ## Destroy the prod cluster
 images: ## Build infra images and side-load them (kind has no registry)
 	@# Only the operand image for now. The api and indexer builds return when
 	@# the application comes back out of temp/ — see docs/decisions.md.
-	docker build -t $(REGISTRY)/postgres-pgvector:17 images/postgres-pgvector
+	docker build -t $(REGISTRY)/postgres-pgvector:17 infrastructure/images/postgres-pgvector
 	@for c in jenie-dev jenie-prod; do \
 	  kind get clusters | grep -qx $$c || continue; \
 	  kind load docker-image --name $$c $(REGISTRY)/postgres-pgvector:17; \
