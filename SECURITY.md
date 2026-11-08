@@ -106,6 +106,18 @@ point: a security control that selects nothing reports no error, passes
 every schema check, and appears in `kubectl get` exactly like one that
 works.
 
+### Deliberate: Grafana uses a fixed password
+
+`admin` / `admin`, in plaintext in the HelmRelease. Grafana is reachable
+only through `kubectl port-forward` — it is not attached to the Gateway, so
+there is no network path to it without cluster credentials, which already
+outrank Grafana's own. A generated password rotates on every cluster
+rebuild and makes any written instruction wrong.
+
+This does not generalise. Anywhere the console is reachable, it is SSO or a
+SOPS-encrypted secret, and the fixed credential is the first thing to
+remove.
+
 ### Known weakness: health endpoints are public
 
 The HTTPRoute matches `PathPrefix: /`, so `/healthz`, `/readyz` and

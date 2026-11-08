@@ -72,6 +72,17 @@ spec:
     # now while there are zero such rules, not during an incident.
     grafana:
       enabled: true
+      # Fixed, in plaintext, on purpose — and only defensible because of
+      # what Grafana is here: reachable solely by `kubectl port-forward`,
+      # never routed through the Gateway, on a disposable local cluster
+      # holding no real data. The generated password rotates on every
+      # rebuild, which means documented credentials are wrong the moment
+      # anyone follows them.
+      #
+      # On anything long-lived this is a SOPS-encrypted secret or SSO, and
+      # Grafana is not reachable without authenticating at the edge.
+      adminUser: admin
+      adminPassword: admin
       sidecar:
         dashboards:
           enabled: true

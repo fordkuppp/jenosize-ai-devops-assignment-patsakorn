@@ -144,8 +144,13 @@ admin console on port 80 is not a thing to ship.
 
 ```sh
 eval "$(make kubeconfig ENV=dev)"
-make grafana      # port-forwards and prints the generated password
+make grafana      # port-forwards; login is admin / admin
 ```
+
+The Grafana password is fixed rather than generated, because a rotating one
+makes written instructions wrong on every rebuild. That is acceptable only
+because Grafana is reachable here by port-forward alone — never through the
+Gateway — on a disposable cluster. See `SECURITY.md`.
 
 The dashboard is **Jenie Helpdesk AI** (`/d/jenie-rag`): service health,
 error budget, retrieval-versus-generation latency, answer outcomes,
