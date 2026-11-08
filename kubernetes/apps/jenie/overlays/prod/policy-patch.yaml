@@ -22,8 +22,12 @@ spec:
         maxWeight: 60
         stepWeightPromotion: 100
       analysis:
-        interval: 30s
-        threshold: 3
+        # 1m, not 30s. Flagger starts judging one interval in, while the
+        # canary pod is still warming and its metric series does not exist
+        # yet — rate() needs two scrapes in its window before it returns
+        # anything. Checking faster than the data arrives just fails sooner.
+        interval: 1m
+        threshold: 5
         # templateRef is required for anything that is not a Flagger
         # built-in. Without it Flagger resolves the name against its own
         # built-ins, finds nothing, and fails the check with "no usable
@@ -57,6 +61,15 @@ spec:
         # two backends — Envoy Gateway emits one cluster per HTTPRoute rule
         # — so the gates read the application's own metrics instead.
         #
+        # `or vector(...)` on every query: absent data is NOT failure.
+        #
+        # A canary pod lives about two minutes, its metric series only
+        # exists after the first request, and rate() needs two scrapes.
+        # Flagger counts an empty result as a failed check, so without a
+        # fallback a healthy release is rolled back during warm-up — which
+        # happened five times before this. The fallback is the "no traffic
+        # yet" value for each gate, so they only fail on evidence.
+        #
         # The canary is the ORIGINAL Deployment: Flagger builds a separate
         # <target>-primary for the stable version and leaves the original
         # carrying the new one. So canary pods are "<target>-<hash>-<id>"
@@ -69,11 +82,13 @@ spec:
               /
               clamp_min(sum(rate(http_requests_total{namespace="{{ namespace }}",pod=~"{{ target }}-.*",pod!~"{{ target }}-primary-.*"}[{{ interval }}])), 0.001)
             )
+            or vector(100)
         - name: canary-latency-p95
           query: |
             histogram_quantile(0.95,
               sum by (le) (rate(http_request_duration_seconds_bucket{namespace="{{ namespace }}",pod=~"{{ target }}-.*",pod!~"{{ target }}-primary-.*"}[{{ interval }}]))
             )
+            or vector(0)
         - name: rag-refusal-rate
           query: |
             100 * (
@@ -81,3 +96,4 @@ spec:
               /
               clamp_min(sum(rate(rag_answers_total{namespace="{{ namespace }}",pod=~"{{ target }}-.*",pod!~"{{ target }}-primary-.*"}[{{ interval }}])), 0.001)
             )
+            or vector(0)
