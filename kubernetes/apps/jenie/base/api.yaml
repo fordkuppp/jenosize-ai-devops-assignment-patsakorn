@@ -57,7 +57,17 @@ spec:
           type: RuntimeDefault
       containers:
         - name: app
-          image: ghcr.io/fordkuppp/jenie-api:v0.1.0 # {"$imagepolicy": "flux-system:jenie-api"}
+          # PLACEHOLDER — podinfo stands in for the real API until the Python
+          # service comes back out of temp/. It is Flagger's own demo app, so
+          # it already serves /healthz, /readyz and Prometheus /metrics on one
+          # port: every probe, the PodMonitor and the canary analysis below
+          # exercise the real code paths rather than being asserted.
+          #
+          # To swap back: restore the line below and the $imagepolicy marker.
+          #   image: ghcr.io/fordkuppp/jenie-api:v0.1.0 # {"$imagepolicy": "flux-system:jenie-api"}
+          image: ghcr.io/stefanprodan/podinfo:6.9.2 # {"$imagepolicy": "flux-system:jenie-api"}
+          args:
+            - --port=8000
           ports:
             - name: http
               containerPort: 8000
@@ -110,6 +120,10 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: data
+              mountPath: /data
       volumes:
         - name: tmp
+          emptyDir: {}
+        - name: data
           emptyDir: {}
