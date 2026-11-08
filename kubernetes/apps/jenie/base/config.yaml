@@ -11,6 +11,12 @@ data:
   CHUNK_SIZE: "512"
   CHUNK_OVERLAP: "64"
   RETRIEVAL_TOP_K: "5"
+  # Histogram buckets are part of the SLO contract, not a tuning knob. Every
+  # threshold in slo.yaml must appear here exactly, or its query matches no
+  # series and the objective silently measures nothing.
+  #   ask-latency       -> 2.5
+  #   retrieval-latency -> 0.5
+  HISTOGRAM_BUCKETS: "0.01,0.025,0.05,0.1,0.25,0.5,0.75,1,2.5,5,10"
   # Unset LLM_BASE_URL selects the deterministic stub, which is what CI uses:
   # the pipeline must never need a GPU.
   LLM_BASE_URL: ""

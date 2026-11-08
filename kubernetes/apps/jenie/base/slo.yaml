@@ -47,21 +47,29 @@ spec:
 
     # ── 2. Latency ─────────────────────────────────────────────────────────
     #
-    # NOTE: le="3.0" must be an actual histogram bucket boundary. Prometheus
-    # cannot interpolate between buckets, so if the instrumentator is not
-    # configured with a 3.0 bucket this query silently measures the wrong
-    # threshold. The SLO and the buckets have to be chosen together.
+    # 2.5s, not 3s, because 2.5 is an actual bucket boundary and 3.0 is not.
+    #
+    # This is not a rounding decision. Prometheus cannot interpolate between
+    # buckets: a query for le="3.0" against a histogram without that boundary
+    # matches no series at all, the ratio evaluates to nothing, and the SLO
+    # reports healthy forever because it is measuring nothing. Verified
+    # against the running service, whose buckets are
+    # 0.005 .. 0.25 0.5 0.75 1 2.5 5 10.
+    #
+    # The objective and the buckets are one decision. If 3s is the number the
+    # business wants, the application must emit a 3.0 bucket — see
+    # HISTOGRAM_BUCKETS in the app ConfigMap.
     - name: ask-latency
       objective: 99.0
       description: >-
-        99% of /ask requests complete within 3s. Chosen because an LLM
-        round-trip dominates the budget and anything tighter would be a
-        promise about the model, not about the platform.
+        99% of /ask requests complete within 2.5s. An LLM round-trip
+        dominates the budget, so anything tighter is a promise about the
+        model rather than about the platform.
       sli:
         raw:
           errorRatioQuery: |
             1 - (
-              sum(rate(http_request_duration_seconds_bucket{job="jenie-api",handler="/ask",le="3.0"}[{{.window}}]))
+              sum(rate(http_request_duration_seconds_bucket{job="jenie-api",handler="/ask",le="2.5"}[{{.window}}]))
               /
               sum(rate(http_request_duration_seconds_count{job="jenie-api",handler="/ask"}[{{.window}}]))
             )
