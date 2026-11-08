@@ -62,6 +62,19 @@ jobs:
         with:
           terraform_version: 1.15.9
           terraform_wrapper: false
+      - name: cache terraform providers
+        # Four root modules each init the same providers. Without a shared
+        # cache that is four downloads from GitHub releases per run, and a
+        # single slow one fails the build — which is how this job first
+        # broke, with "context deadline exceeded". Keyed on the lock files,
+        # so a provider bump invalidates it.
+        uses: actions/cache@v4
+        with:
+          path: .terraform-cache
+          key: tf-providers-${{ hashFiles('infrastructure/terraform/envs/*/*/.terraform.lock.hcl') }}
+          restore-keys: tf-providers-
+      - name: provider cache dir
+        run: mkdir -p .terraform-cache
       - uses: azure/setup-helm@v4
         with:
           version: v3.19.0
