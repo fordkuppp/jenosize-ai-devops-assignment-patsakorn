@@ -190,13 +190,23 @@ jobs:
 
       - name: push
         if: github.ref == 'refs/heads/main'
-        # Tagged by commit SHA, not latest. A running container maps back to
-        # an exact commit, which is what makes image automation's semver
-        # policy meaningful rather than a guess.
+        # Two tags, for two readers.
+        #
+        #   sha-<short>                    for a human: which commit is this
+        #   main-<unix-ts>-<short>         for ImagePolicy: which is newest
+        #
+        # A bare SHA tag cannot be ordered — "latest" among hex strings is
+        # meaningless, so an ImagePolicy over them would promote at random.
+        # Prefixing a build timestamp makes newest well-defined while
+        # keeping the commit in the tag. Never `latest`: a running container
+        # must map back to an exact commit.
         run: |
           IMAGE=ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}
+          TS=$(date -u +%s)
           docker tag ${{ matrix.name }}:${{ github.sha }} "$IMAGE:sha-${GITHUB_SHA::12}"
+          docker tag ${{ matrix.name }}:${{ github.sha }} "$IMAGE:main-${TS}-${GITHUB_SHA::12}"
           docker push "$IMAGE:sha-${GITHUB_SHA::12}"
+          docker push "$IMAGE:main-${TS}-${GITHUB_SHA::12}"
 
   e2e-app:
     name: e2e · rag pipeline

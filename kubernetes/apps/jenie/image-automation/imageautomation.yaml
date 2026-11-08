@@ -35,9 +35,15 @@ metadata:
 spec:
   imageRepositoryRef:
     name: jenie-api
+  # Semver would be wrong here: CI tags by build, not by release. The filter
+  # extracts the build timestamp and orders numerically, so "newest" means
+  # most recently built rather than alphabetically largest hex string.
+  filterTags:
+    pattern: '^main-(?P<ts>\d+)-[a-f0-9]+$'
+    extract: '$ts'
   policy:
-    semver:
-      range: ">=0.1.0"
+    numerical:
+      order: asc
 ---
 apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImageRepository
@@ -56,9 +62,12 @@ metadata:
 spec:
   imageRepositoryRef:
     name: jenie-indexer
+  filterTags:
+    pattern: '^main-(?P<ts>\d+)-[a-f0-9]+$'
+    extract: '$ts'
   policy:
-    semver:
-      range: ">=0.1.0"
+    numerical:
+      order: asc
 ---
 apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImageUpdateAutomation
