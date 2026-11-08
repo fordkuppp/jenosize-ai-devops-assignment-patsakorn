@@ -4,7 +4,10 @@ namespace: jenie
 resources:
   - namespace.yaml
   - config.yaml
+  - backup-credentials.sops.yaml
+  - backup-store.yaml
   - postgres.yaml
+  - backup.yaml
   - api.yaml
   - indexer.yaml
   - policy.yaml

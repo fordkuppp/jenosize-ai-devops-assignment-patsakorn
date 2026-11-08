@@ -1,0 +1,49 @@
+---
+# Where and how backups are stored. Owned by the barman-cloud plugin rather
+# than by cluster.spec.backup.barmanObjectStore, which CNPG deprecated in
+# 1.26 and has announced for removal.
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: jenie-backups
+  namespace: jenie
+spec:
+  # Base backups and the WAL needed to reach any point within the window.
+  # Overridden per environment: dev keeps days, prod keeps a month.
+  retentionPolicy: "7d"
+  configuration:
+    destinationPath: s3://jenie-backups/
+    endpointURL: http://jenie-backup-store:8333
+    s3Credentials:
+      accessKeyId:
+        name: jenie-backup-store
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: jenie-backup-store
+        key: SECRET_ACCESS_KEY
+    wal:
+      compression: gzip
+      # WAL archiving is what makes point-in-time recovery possible. Without
+      # it a restore can only reach the last base backup, so the worst-case
+      # data loss is the backup interval rather than seconds.
+      maxParallel: 2
+    data:
+      compression: gzip
+      jobs: 2
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: jenie-pg-daily
+  namespace: jenie
+spec:
+  # Six fields: CNPG uses the seconds-resolution cron format, so the usual
+  # five-field string silently means something else.
+  schedule: "0 0 2 * * *"
+  immediate: true
+  backupOwnerReference: self
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+  cluster:
+    name: jenie-pg

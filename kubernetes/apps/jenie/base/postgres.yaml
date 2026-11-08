@@ -11,6 +11,13 @@ spec:
   imageName: ghcr.io/fordkuppp/postgres-pgvector:17
   storage:
     size: 2Gi
+  # Registers the backup plugin and makes it the WAL archiver, which is the
+  # half that enables point-in-time recovery rather than just nightly dumps.
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: jenie-backups
   bootstrap:
     initdb:
       database: jenie

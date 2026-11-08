@@ -4,7 +4,9 @@ resources:
   - namespaces.yaml
   - helmrepositories.yaml
   - envoy-gateway/helmrelease.yaml
+  - cert-manager/helmrelease.yaml
   - cloudnative-pg/helmrelease.yaml
+  - barman-cloud/helmrelease.yaml
   - flagger/helmrelease.yaml
   - sloth/helmrelease.yaml
   - kube-prometheus-stack/helmrelease.yaml

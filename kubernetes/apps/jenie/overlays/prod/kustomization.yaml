@@ -5,6 +5,13 @@ resources:
   - ../../base
 patches:
   - path: policy-patch.yaml
+  - target:
+      kind: ObjectStore
+      name: jenie-backups
+    patch: |-
+      - op: replace
+        path: /spec/retentionPolicy
+        value: 30d
   - path: postgres-patch.yaml
   - target:
       kind: Deployment

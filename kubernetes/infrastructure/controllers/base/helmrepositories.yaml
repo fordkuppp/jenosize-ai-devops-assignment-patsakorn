@@ -41,3 +41,23 @@ spec:
   type: oci
   interval: 1h
   url: oci://docker.io/envoyproxy
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: jetstack
+  namespace: flux-system
+spec:
+  type: oci
+  interval: 1h
+  url: oci://quay.io/jetstack/charts
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: cnpg-charts
+  namespace: flux-system
+spec:
+  type: oci
+  interval: 1h
+  url: oci://ghcr.io/cloudnative-pg/charts

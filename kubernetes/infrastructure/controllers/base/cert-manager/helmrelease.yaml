@@ -1,0 +1,31 @@
+---
+# Here only because the barman-cloud plugin requires it: the plugin speaks to
+# the CNPG operator over mTLS and provisions its own Issuer and Certificates.
+#
+# Not regrettable collateral — the Gateway currently serves plain HTTP, and
+# cert-manager is what would issue its TLS. That is the next thing to use it
+# for rather than a second dependency.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: cert-manager
+  namespace: cert-manager
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: cert-manager
+      version: "v1.19.1"
+      sourceRef:
+        kind: HelmRepository
+        name: jetstack
+        namespace: flux-system
+  install:
+    crds: Create
+    remediation: { retries: 3 }
+  upgrade:
+    crds: CreateReplace
+  values:
+    crds:
+      enabled: true
+      keep: false

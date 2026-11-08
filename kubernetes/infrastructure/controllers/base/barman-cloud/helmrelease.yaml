@@ -1,0 +1,40 @@
+---
+# The CNPG Barman Cloud plugin.
+#
+# Not spec.backup.barmanObjectStore: that in-tree path still works in 1.30
+# but has been deprecated since 1.26 with removal announced. Writing new
+# backup configuration against a field scheduled for deletion is the same
+# mistake as reaching for ingress-nginx — and backups are the one thing you
+# least want to discover is unsupported during an incident.
+#
+# Lives in the operator's namespace because the plugin registers with CNPG
+# over a mTLS channel cert-manager issues for both ends.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: plugin-barman-cloud
+  namespace: cnpg-system
+spec:
+  dependsOn:
+    - name: cert-manager
+      namespace: cert-manager
+    - name: cloudnative-pg
+      namespace: cnpg-system
+  interval: 30m
+  chart:
+    spec:
+      chart: plugin-barman-cloud
+      version: "0.8.1"
+      sourceRef:
+        kind: HelmRepository
+        name: cnpg-charts
+        namespace: flux-system
+  install:
+    remediation: { retries: 3 }
+  upgrade:
+    remediation: { retries: 3 }
+  values:
+    # The chart renders the ObjectStore CRD as a template rather than
+    # shipping a crds/ directory, so Helm owns its lifecycle.
+    crds:
+      create: true
