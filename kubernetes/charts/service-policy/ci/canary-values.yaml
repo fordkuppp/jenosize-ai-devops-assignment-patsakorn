@@ -26,10 +26,12 @@ strategy:
           max: 40
         interval: 1m
   metricTemplates:
+    # Uses Flagger's {{ interval }} placeholder on purpose: a fixture that
+    # avoids it cannot catch the chart templating over it.
     - name: rag-refusal-rate
       query: |
-        sum(rate(rag_answers_total{outcome="refused"}[1m]))
-          / sum(rate(rag_answers_total[1m])) * 100
+        sum(rate(rag_answers_total{outcome="refused"}[{{ interval }}]))
+          / sum(rate(rag_answers_total[{{ interval }}])) * 100
 autoscaling:
   enabled: true
 podDisruption:

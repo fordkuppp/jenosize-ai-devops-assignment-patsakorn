@@ -3,7 +3,6 @@ kind: Kustomization
 namespace: jenie
 resources:
   - ../../base
-  - imageautomation.yaml
 patches:
   - path: policy-patch.yaml
   - path: postgres-patch.yaml

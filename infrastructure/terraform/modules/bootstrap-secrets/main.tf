@@ -1,10 +1,11 @@
 # The only secrets Terraform seeds are the ones Flux cannot source from git:
 # the key that decrypts everything else, and the key that lets Flux write back.
 #
-# Everything else — database credentials in particular — is generated in
-# cluster by the operator that owns it. CloudNativePG creates its own
-# `<cluster>-app` secret; duplicating that here would mean two sources of
-# truth for one password.
+# Nothing application-shaped belongs here. Database credentials are generated
+# in cluster by CloudNativePG as `<cluster>-app`, and the application namespace
+# is declared in kubernetes/apps — a platform bootstrap that knows an
+# application's name is a layering error, the same one that put a tenant name
+# on a GatewayClass.
 
 # Terraform seeds secrets into flux-system before Flux is installed, so it has
 # to own the namespace too. Letting the Helm release create it is a trap: the
@@ -19,17 +20,6 @@ resource "kubernetes_namespace" "flux" {
       # Flux's own kustomize-controller applies this label; setting it here
       # keeps the namespace from flapping between managers.
       "app.kubernetes.io/part-of" = "flux"
-    }
-  }
-}
-
-resource "kubernetes_namespace" "app" {
-  metadata {
-    name = var.app_namespace
-    labels = {
-      "app.kubernetes.io/managed-by" = "terraform"
-      # Consumed by NetworkPolicy peers in other namespaces.
-      "kubernetes.io/metadata.name" = var.app_namespace
     }
   }
 }

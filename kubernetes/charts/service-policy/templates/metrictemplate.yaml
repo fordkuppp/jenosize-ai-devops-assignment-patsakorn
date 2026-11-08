@@ -16,6 +16,11 @@ spec:
   provider:
     type: {{ .provider | default "prometheus" }}
     address: {{ .address | default "http://prometheus-operated.monitoring.svc:9090" }}
+  # toYaml, NOT tpl. These queries contain Flagger's own placeholders —
+  # {{ "{{ interval }}" }}, {{ "{{ target }}" }} — which Flagger evaluates at
+  # analysis time. Running Helm's tpl over them tries to resolve those as Helm
+  # functions and fails the whole render with `function "interval" not
+  # defined`. The chart passes queries through; it does not template them.
   query: |
-    {{- tpl .query $ | nindent 4 }}
+    {{- .query | nindent 4 }}
 {{- end }}

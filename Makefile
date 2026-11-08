@@ -116,7 +116,8 @@ validate: ## Everything CI checks: terraform, helm, kustomize
 	          kubernetes/infrastructure/controllers/overlays/prod \
 	          kubernetes/infrastructure/configs \
 	          kubernetes/apps/jenie/overlays/dev \
-	          kubernetes/apps/jenie/overlays/prod; do \
+	          kubernetes/apps/jenie/overlays/prod \
+	          kubernetes/apps/jenie/image-automation; do \
 	  echo "  build  $$d"; kustomize build $$d >/dev/null || exit 1; \
 	done
 

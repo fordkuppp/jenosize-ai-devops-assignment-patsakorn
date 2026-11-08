@@ -1,0 +1,10 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jenie
+  labels:
+    # NetworkPolicy peers in other namespaces select on this. The API server
+    # sets it too, but policy that depends on an implicit value is harder to
+    # read than the duplication costs.
+    kubernetes.io/metadata.name: jenie

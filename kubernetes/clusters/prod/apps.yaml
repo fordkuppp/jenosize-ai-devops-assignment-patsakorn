@@ -12,6 +12,12 @@ spec:
   path: ./kubernetes/apps/jenie/overlays/prod
   prune: true
   wait: true
+  # A Job's spec.template is immutable. The indexer is a Job, and image
+  # automation exists precisely to change its tag — so without this the first
+  # tag bump fails with `field is immutable` and reconciliation is stuck for
+  # good. force lets Flux delete and recreate on immutable-field conflicts,
+  # which for an indexing job is also the behaviour you want.
+  force: true
   sourceRef:
     kind: GitRepository
     name: flux2-sync

@@ -1,8 +1,3 @@
-variable "app_namespace" {
-  type    = string
-  default = "jenie"
-}
-
 variable "sops_age_key" {
   description = <<-EOT
     The age private key Flux uses to decrypt SOPS-encrypted manifests.
