@@ -134,15 +134,18 @@ strategy:
     threshold: 5            # failed checks before automatic rollback
     progressDeadlineSeconds: 600
 
-    metrics:
-      - name: request-success-rate
-        thresholdRange:
-          min: 99
-        interval: 1m
-      - name: request-duration
-        thresholdRange:
-          max: 3000
-        interval: 1m
+    # Not Flagger's built-in request-success-rate / request-duration.
+    #
+    # Those query Envoy, and Envoy Gateway emits one cluster per HTTPRoute
+    # *rule* — "httproute/<ns>/<route>/rule/0" — not one per backendRef. So
+    # there is no canary-specific Envoy series to measure, and the built-ins
+    # halt with "no values found" until the failure threshold rolls a
+    # perfectly good release back. Observed, not theorised.
+    #
+    # The application's own metrics can distinguish canary pods by name, so
+    # the consuming release supplies templates that do. Chart default is
+    # empty: a gate that cannot see the canary is worse than no gate.
+    metrics: []
 
     # Mandatory, not optional. With no synthetic traffic during analysis there
     # are no samples to evaluate, so the canary stalls silently rather than
@@ -153,9 +156,15 @@ strategy:
         type: rollout
         url: http://flagger-loadtester.flagger-system/
         metadata:
+          # Must hit a path the application actually measures. Health
+          # endpoints are normally excluded from the metrics middleware, so
+          # a load generator pointed at /healthz produces traffic no gate
+          # can see — the canary then halts on "no values found" and rolls
+          # back a healthy release. Observed, not theorised.
           cmd: >-
-            hey -z 1m -q 5 -c 2
-            http://{{ .Values.target.name }}-canary:{{ .Values.target.service.port }}/healthz
+            hey -z 1m -q 5 -c 2 -m POST -T application/json
+            -d '{"query":"canary probe"}'
+            http://{{ .Values.target.name }}-canary:{{ .Values.target.service.port }}/ask
 
   # App-specific Flagger MetricTemplates, rendered verbatim. The chart stays
   # generic by knowing nothing about them; the consumer ships its own and
