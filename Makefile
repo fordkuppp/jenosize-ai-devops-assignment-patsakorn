@@ -42,13 +42,13 @@ down-prod: ## Destroy the prod cluster
 	cd $(TF_PROD) && terraform destroy -auto-approve
 
 .PHONY: images
-images: ## Build images and side-load them (kind has no registry)
-	docker build -t $(REGISTRY)/jenie-api:$(TAG) -f api/Dockerfile .
-	docker build -t $(REGISTRY)/jenie-indexer:$(TAG) -f worker/Dockerfile .
+images: ## Build infra images and side-load them (kind has no registry)
+	@# Only the operand image for now. The api and indexer builds return when
+	@# the application comes back out of temp/ — see docs/decisions.md.
 	docker build -t $(REGISTRY)/postgres-pgvector:17 images/postgres-pgvector
-	for c in jenie-dev jenie-prod; do \
+	@for c in jenie-dev jenie-prod; do \
 	  kind get clusters | grep -qx $$c || continue; \
-	  kind load docker-image --name $$c $(REGISTRY)/jenie-api:$(TAG) $(REGISTRY)/jenie-indexer:$(TAG) $(REGISTRY)/postgres-pgvector:17; \
+	  kind load docker-image --name $$c $(REGISTRY)/postgres-pgvector:17; \
 	done
 
 .PHONY: validate
