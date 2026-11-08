@@ -217,12 +217,21 @@ verify: guard ## Server-side dry-run every overlay against the ENV cluster
 
 .PHONY: guard
 guard:
-	@test -f "$(KUBECONFIG_PATH)" || { \
-	  echo "no kubeconfig at $(KUBECONFIG_PATH)"; \
-	  echo "the ENV=$(ENV) cluster does not exist — run: make up-$(ENV)"; \
+	@# Checks the cluster is USABLE, not that a file is present. `terraform
+	@# destroy` leaves a ~28 byte kubeconfig stub behind, so a file test
+	@# passes after teardown and hands you a config that resolves to
+	@# localhost:8080 — kubectl's fallback — and a confusing connection
+	@# refused rather than a clear "it is not running".
+	@kind get clusters 2>/dev/null | grep -qx 'jenie-$(ENV)' || { \
+	  echo "cluster jenie-$(ENV) is not running"; \
+	  echo "  run: make up-$(ENV)"; \
 	  echo; \
 	  echo "not falling back to your current context on purpose: that is how"; \
 	  echo "a command in this repo ends up talking to a cluster you care about."; \
+	  exit 1; }
+	@test -s "$(KUBECONFIG_PATH)" && grep -q 'server:' "$(KUBECONFIG_PATH)" 2>/dev/null || { \
+	  echo "cluster jenie-$(ENV) exists but $(KUBECONFIG_PATH) is empty or a stub"; \
+	  echo "  regenerate it: terraform -chdir=infrastructure/terraform/envs/$(ENV)/1-cluster apply"; \
 	  exit 1; }
 
 .PHONY: kubeconfig
