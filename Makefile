@@ -123,6 +123,23 @@ validate: ## Everything CI checks: terraform, helm, kustomize
 
 # Every cluster-facing target depends on this. It fails loudly rather than
 # falling through to the ambient context.
+.PHONY: verify
+verify: guard ## Server-side dry-run every overlay against the ENV cluster
+	@# `validate` renders and schema-checks; this asks the API server. Only
+	@# the second kind catches an apiVersion the cluster does not serve, a
+	@# field a CRD rejects, or an admission webhook saying no. It needs a
+	@# live cluster, which is why it cannot live in `validate`.
+	@for d in kubernetes/infrastructure/controllers/overlays/$(ENV) \
+	          kubernetes/infrastructure/configs \
+	          kubernetes/apps/jenie/overlays/$(ENV) \
+	          kubernetes/apps/jenie/image-automation; do \
+	  printf '  %-52s ' "$$d"; \
+	  out=$$(kustomize build "$$d" | kubectl apply --dry-run=server -f - 2>&1); \
+	  if echo "$$out" | grep -qiE 'error|no matches'; then \
+	    echo FAIL; echo "$$out" | grep -iE 'error|no matches' | head -3 | sed 's/^/      /'; exit 1; \
+	  else echo "ok ($$(echo "$$out" | wc -l) objects)"; fi; \
+	done
+
 .PHONY: guard
 guard:
 	@test -f "$(KUBECONFIG_PATH)" || { \

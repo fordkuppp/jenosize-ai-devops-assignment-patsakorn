@@ -18,7 +18,7 @@ spec:
   secretRef:
     name: flux-image-automation
 ---
-apiVersion: image.toolkit.fluxcd.io/v1beta2
+apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImageRepository
 metadata:
   name: jenie-api
@@ -27,7 +27,7 @@ spec:
   image: ghcr.io/fordkuppp/jenie-api
   interval: 5m
 ---
-apiVersion: image.toolkit.fluxcd.io/v1beta2
+apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImagePolicy
 metadata:
   name: jenie-api
@@ -39,7 +39,7 @@ spec:
     semver:
       range: ">=0.1.0"
 ---
-apiVersion: image.toolkit.fluxcd.io/v1beta2
+apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImageRepository
 metadata:
   name: jenie-indexer
@@ -48,7 +48,7 @@ spec:
   image: ghcr.io/fordkuppp/jenie-indexer
   interval: 5m
 ---
-apiVersion: image.toolkit.fluxcd.io/v1beta2
+apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImagePolicy
 metadata:
   name: jenie-indexer
@@ -60,7 +60,7 @@ spec:
     semver:
       range: ">=0.1.0"
 ---
-apiVersion: image.toolkit.fluxcd.io/v1beta2
+apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImageUpdateAutomation
 metadata:
   name: jenie
