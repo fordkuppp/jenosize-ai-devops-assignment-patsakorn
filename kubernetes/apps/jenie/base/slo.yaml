@@ -18,6 +18,11 @@ spec:
     owner: platform
     tier: user-facing
 
+  # NOTE: job is "<namespace>/<podmonitor-name>", not the service name. A
+  # PodMonitor derives it that way, and a query written against "jenie-api"
+  # matches no series — the recording rules then produce nothing and the
+  # objective reports healthy while measuring nothing. Renaming the
+  # PodMonitor changes this value.
   slos:
     # ── 1. Availability ────────────────────────────────────────────────────
     - name: ask-availability
@@ -28,9 +33,9 @@ spec:
       sli:
         events:
           errorQuery: |
-            sum(rate(http_requests_total{job="jenie-api",handler="/ask",status=~"5.."}[{{.window}}]))
+            sum(rate(http_requests_total{job="jenie/jenie-api",handler="/ask",status=~"5.."}[{{.window}}]))
           totalQuery: |
-            sum(rate(http_requests_total{job="jenie-api",handler="/ask"}[{{.window}}]))
+            sum(rate(http_requests_total{job="jenie/jenie-api",handler="/ask"}[{{.window}}]))
       alerting:
         name: JenieAskAvailability
         labels:
@@ -69,9 +74,9 @@ spec:
         raw:
           errorRatioQuery: |
             1 - (
-              sum(rate(http_request_duration_seconds_bucket{job="jenie-api",handler="/ask",le="2.5"}[{{.window}}]))
+              sum(rate(http_request_duration_seconds_bucket{job="jenie/jenie-api",handler="/ask",le="2.5"}[{{.window}}]))
               /
-              sum(rate(http_request_duration_seconds_count{job="jenie-api",handler="/ask"}[{{.window}}]))
+              sum(rate(http_request_duration_seconds_count{job="jenie/jenie-api",handler="/ask"}[{{.window}}]))
             )
       alerting:
         name: JenieAskLatency
@@ -99,9 +104,9 @@ spec:
         raw:
           errorRatioQuery: |
             1 - (
-              sum(rate(rag_retrieval_duration_seconds_bucket{job="jenie-api",le="0.5"}[{{.window}}]))
+              sum(rate(rag_retrieval_duration_seconds_bucket{job="jenie/jenie-api",le="0.5"}[{{.window}}]))
               /
-              sum(rate(rag_retrieval_duration_seconds_count{job="jenie-api"}[{{.window}}]))
+              sum(rate(rag_retrieval_duration_seconds_count{job="jenie/jenie-api"}[{{.window}}]))
             )
       alerting:
         name: JenieRetrievalLatency
