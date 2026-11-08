@@ -259,6 +259,42 @@ manifests, not hand-maintained beside them.
 
 ---
 
+## The canary: seven faults between valid YAML and a working feature
+
+Progressive delivery was configured, deployed, documented and reported
+`Initialized` for hours while being completely inert. Getting one rollout to
+execute took seven fixes, each invisible until the one before it was
+resolved:
+
+| # | fault | why nothing caught it |
+|---|---|---|
+| 1 | Flagger's built-in `request-success-rate` queries Envoy, and Envoy Gateway emits one cluster per HTTPRoute *rule* — there is no per-backend series to compare | the metric name is valid, the gate is valid |
+| 2 | the load generator targeted `/healthz`, which the metrics middleware deliberately excludes | both decisions were individually correct |
+| 3 | custom metrics had no `templateRef`, so Flagger resolved them against its built-ins and found nothing | the MetricTemplates existed and were correct; nothing pointed at them |
+| 4 | gates filtered `pod=~"<target>-canary-.*"`, but Flagger keeps the **original** Deployment as the canary and creates `<target>-primary` — there is no `-canary` Deployment | the regex is valid and matches a plausible name |
+| 5 | the load generator used a bare service name across namespaces | DNS failure looks identical to a metrics failure |
+| 6 | the NetworkPolicy denied the load generator | **introduced by fixing the policy** — while it matched zero pods it blocked nothing |
+| 7 | `rate()` needs two scrapes, a canary pod lives ~2 minutes, and Flagger counts an empty result as a *failed* check | the query is correct and has nothing to divide |
+
+Fault 6 is the one worth remembering: a NetworkPolicy matching no pods is not
+a weak policy, it is **no policy**, and making it work is what revealed every
+undeclared dependency on it. The same selector bug meant the PodDisruptionBudget
+protected nothing and the PodMonitor scraped nothing — so production had no
+application metrics at all, and `SECURITY.md` claimed a default-deny posture
+that was true in intent and false in effect.
+
+Fault 7 forced a policy decision rather than a fix. `or vector(...)` makes the
+gates fail **open** on absent data. A gate that treats "no data" as failure
+cannot survive a short canary; one that ignores absent data would sail through
+a release whose metrics are genuinely broken. The second risk is covered
+elsewhere — `JenieGatewayNoHealthyBackends` fires on zero healthy endpoints,
+and a dead scrape target is itself alertable — so the gates only fail on
+evidence. It is a trade, and it is the right one here, but it is a trade.
+
+Every one of these passed `make validate`, `make verify`, kubeconform and CI
+throughout. The Canary object existed, was accepted by the API server, and
+reported a healthy phase the entire time.
+
 ## What this cost
 
 Nineteen defects were found during this work. Of those, **none** were caught

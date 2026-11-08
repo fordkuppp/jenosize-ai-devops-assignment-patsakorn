@@ -78,7 +78,8 @@ keys per environment is a values change, not a design change.
   Kubernetes API, so it carries no credential for it
 - No RBAC rules are granted to the application service account
 - **Default-deny NetworkPolicy**, ingress and egress, with explicit allows:
-  in from the gateway and monitoring, out to PostgreSQL and DNS only
+  in from the gateway, monitoring and the canary load generator; out to
+  PostgreSQL and DNS only
 - The image-automation deploy key is **repo-scoped**, not a user token. Its
   blast radius is one repository and revoking it breaks only automated tag
   bumps. Reconciliation itself uses public HTTPS with no credential at all.
@@ -89,6 +90,21 @@ The only ingress is the Envoy Gateway on one HTTP listener. Rate limiting is
 an Envoy `BackendTrafficPolicy` — 60 requests per minute per proxy — as typed
 configuration rather than an annotation string, alongside circuit-breaker
 limits that cap in-flight and pending requests.
+
+### Previously false, now true
+
+This document claimed default-deny NetworkPolicy from the start, and in
+production it was not in effect. Flagger creates a `<target>-primary`
+Deployment with a derived selector label and keeps the original as the
+canary, so a policy selecting the original label covered only the canary —
+which is scaled to zero at rest. **A NetworkPolicy matching zero pods does
+not deny traffic; it does not apply.** The same mistake left the
+PodDisruptionBudget and the PodMonitor selecting nothing.
+
+Recorded rather than quietly corrected, because the failure mode is the
+point: a security control that selects nothing reports no error, passes
+every schema check, and appears in `kubectl get` exactly like one that
+works.
 
 ### Known weakness: health endpoints are public
 
