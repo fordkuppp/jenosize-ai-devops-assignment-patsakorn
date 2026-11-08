@@ -52,6 +52,12 @@ spec:
         sectionName: http
     networkPolicy:
       enabled: true
+      allowFrom:
+        - namespace: envoy-gateway-system
+        - namespace: monitoring
+        # The canary load generator. Without it the NetworkPolicy denies
+        # the only traffic the release gates can observe.
+        - namespace: flagger-system
       allowTo:
         - podSelector:
             cnpg.io/cluster: jenie-pg

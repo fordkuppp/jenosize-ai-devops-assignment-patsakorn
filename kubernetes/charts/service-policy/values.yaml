@@ -101,6 +101,11 @@ networkPolicy:
   allowFrom:
     - namespace: envoy-gateway-system
     - namespace: monitoring
+    # Progressive delivery needs synthetic traffic during analysis, and the
+    # load tester lives in the mesh controller's namespace. Omit this and a
+    # correctly-configured canary still halts on "no values found" — the
+    # policy denies the only traffic the gates can measure.
+    - namespace: flagger-system
   # Egress is default-deny once this is enabled, so every dependency has to
   # be named. Example shape only — the consuming release supplies its own.
   allowTo: []
@@ -178,10 +183,15 @@ strategy:
           # a load generator pointed at /healthz produces traffic no gate
           # can see — the canary then halts on "no values found" and rolls
           # back a healthy release. Observed, not theorised.
+          # Fully qualified. The load tester runs in flagger-system and the
+          # service lives in the application namespace, so a bare name does
+          # not resolve — hey fails every request, no traffic reaches the
+          # canary, and the gates halt on "no values found". The load
+          # generator failing looks exactly like the metrics being wrong.
           cmd: >-
             hey -z 1m -q 5 -c 2 -m POST -T application/json
             -d '{"query":"canary probe"}'
-            http://{{ .Values.target.name }}-canary:{{ .Values.target.service.port }}/ask
+            http://{{ .Values.target.name }}-canary.{{ .Release.Namespace }}:{{ .Values.target.service.port }}/ask
 
   # App-specific Flagger MetricTemplates, rendered verbatim. The chart stays
   # generic by knowing nothing about them; the consumer ships its own and
