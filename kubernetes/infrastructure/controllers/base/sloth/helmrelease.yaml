@@ -6,6 +6,12 @@ metadata:
   namespace: sloth
 spec:
   interval: 30m
+  # The chart renders a PodMonitor, so monitoring.coreos.com must already be
+  # served. Without this it fails with "no matches for kind PodMonitor" —
+  # which reads like a chart bug and is actually an ordering bug.
+  dependsOn:
+    - name: kube-prometheus-stack
+      namespace: monitoring
   chart:
     spec:
       chart: sloth

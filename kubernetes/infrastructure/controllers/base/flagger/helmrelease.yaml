@@ -6,6 +6,12 @@ metadata:
   namespace: flagger-system
 spec:
   interval: 30m
+  # Flagger queries Prometheus for canary analysis. It installs without it,
+  # but a canary started before Prometheus exists stalls with no metrics —
+  # the silent failure mode, so order it explicitly.
+  dependsOn:
+    - name: kube-prometheus-stack
+      namespace: monitoring
   chart:
     spec:
       chart: flagger

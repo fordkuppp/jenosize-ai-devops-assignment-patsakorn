@@ -6,6 +6,10 @@ metadata:
   namespace: cnpg-system
 spec:
   interval: 30m
+  # podMonitorEnabled below renders a PodMonitor. Same CRD ordering problem.
+  dependsOn:
+    - name: kube-prometheus-stack
+      namespace: monitoring
   chart:
     spec:
       chart: cloudnative-pg
