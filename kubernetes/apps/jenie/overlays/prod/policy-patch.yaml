@@ -75,12 +75,25 @@ spec:
         # carrying the new one. So canary pods are "<target>-<hash>-<id>"
         # and the filter is "starts with target, is not -primary". There is
         # no "<target>-canary" Deployment, only a Service of that name.
+        #
+        # No clamp_min here, deliberately. Clamping the denominator turns
+        # "no requests at all" into a real 0/0.001 = 0, and a genuine zero
+        # is not absent data — so `or vector(100)` never fires and the gate
+        # reports 0% success. Pods that have just been replaced keep flat
+        # series for Prometheus' five-minute staleness window, so this fires
+        # on every rollout, not just the first. The `and` guard yields an
+        # empty result when there is no traffic, which is what lets the
+        # fallback do its job; it also drops the 0/0 NaN.
         - name: canary-success-rate
           query: |
-            100 * (
-              sum(rate(http_requests_total{namespace="{{ namespace }}",pod=~"{{ target }}-.*",pod!~"{{ target }}-primary-.*",status!~"5.."}[{{ interval }}]))
-              /
-              clamp_min(sum(rate(http_requests_total{namespace="{{ namespace }}",pod=~"{{ target }}-.*",pod!~"{{ target }}-primary-.*"}[{{ interval }}])), 0.001)
+            (
+              100 * (
+                sum(rate(http_requests_total{namespace="{{ namespace }}",pod=~"{{ target }}-.*",pod!~"{{ target }}-primary-.*",status!~"5.."}[{{ interval }}]))
+                /
+                sum(rate(http_requests_total{namespace="{{ namespace }}",pod=~"{{ target }}-.*",pod!~"{{ target }}-primary-.*"}[{{ interval }}]))
+              )
+              and
+              sum(rate(http_requests_total{namespace="{{ namespace }}",pod=~"{{ target }}-.*",pod!~"{{ target }}-primary-.*"}[{{ interval }}])) > 0
             )
             or vector(100)
         - name: canary-latency-p95
