@@ -8,7 +8,12 @@ spec:
   dependsOn:
     - name: infra-configs
   interval: 10m
-  timeout: 15m
+  # dev deploys with RollingUpdate, so a healthy apply finishes in well under
+  # a minute. Anything longer is a stuck resource, and with wait: true this
+  # timeout is also how long a fix in git stays unreachable — see the note on
+  # infra-controllers. prod keeps a longer one because its canary analysis
+  # legitimately runs for minutes.
+  timeout: 5m
   path: ./kubernetes/apps/jenie/overlays/dev
   prune: true
   wait: true

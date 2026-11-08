@@ -8,6 +8,10 @@ spec:
   dependsOn:
     - name: infra-configs
   interval: 10m
+  # Longer than dev on purpose: a Flagger canary stepping 20% at a time with
+  # a 30s analysis interval takes minutes to promote, and aborting that would
+  # fail healthy rollouts. The cost is a slower path back from a bad apply,
+  # which is the right trade here and the wrong one in dev.
   timeout: 15m
   path: ./kubernetes/apps/jenie/overlays/prod
   prune: true
