@@ -16,6 +16,14 @@ RUN python -c "from fastembed import TextEmbedding; \
     TextEmbedding(model_name='BAAI/bge-small-en-v1.5')"
 
 FROM python:3.12-slim
+# Security updates for the base image. python:3.12-slim lags Debian's
+# security archive, and Trivy blocked the build on two fixable HIGH CVEs in
+# zlib1g — including a heap buffer overflow in gz_vacate() allowing
+# arbitrary code execution. Pulling the patched package here is the cheapest
+# correct fix; the alternative is waiting for the base image to be rebuilt.
+RUN apt-get update \
+ && apt-get upgrade -y --no-install-recommends \
+ && rm -rf /var/lib/apt/lists/*
 RUN useradd --system --uid 10001 jenie
 COPY --from=build /opt/venv /opt/venv
 COPY --from=build /opt/models /opt/models
