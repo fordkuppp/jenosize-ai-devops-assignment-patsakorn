@@ -1,149 +1,194 @@
 # Jenie Helpdesk AI
 
-A RAG service over an operations knowledge base, deployed as a platform: infrastructure as
-code, a gated CI/CD pipeline, SLO-backed observability, and a security baseline.
+A RAG service over an operations knowledge base, delivered as a platform:
+infrastructure as code, GitOps reconciliation, progressive delivery,
+SLO-backed observability, a security baseline, and backups with a documented
+restore.
 
-The AI part is deliberately small. The question this answers is not *can you build RAG* —
-it is *can you run an AI workload reliably, observably and cheaply*.
+The AI is deliberately small. The question this answers is not *can you build
+RAG* — it is *can you run an AI workload reliably, observably and cheaply*.
 
 ---
 
 ## Architecture
 
 ```mermaid
-flowchart LR
-    U[Client] -->|POST /ask| API[FastAPI service]
-    API -->|hybrid search| PG[(Postgres<br/>pgvector + tsvector)]
-    API -->|chat completions| LLM[OpenAI-compatible backend<br/>ollama · vLLM · Bedrock · stub]
-    DATA[/data<br/>markdown corpus/] --> W[Indexer job]
-    W -->|chunk · embed| PG
-    API -->|/metrics| PROM[Prometheus]
-    PROM --> GRAF[Grafana]
-    PROM -.->|alert rules| SLO[SLO burn alerts]
+flowchart TB
+    subgraph host[" "]
+        direction TB
+        TF[Terraform<br/>1-cluster → 2-platform]
+        GH[(GitHub<br/>this repo)]
+    end
+
+    TF -->|creates| K8S
+    TF -->|installs, seeds SOPS key| FLUX
+    GH -->|public HTTPS, no credential| FLUX
+
+    subgraph K8S["kind cluster"]
+        FLUX[Flux<br/>infra-controllers → infra-configs → apps]
+
+        subgraph edge["envoy-gateway-system"]
+            GW[Gateway API<br/>Envoy :30080]
+        end
+
+        subgraph app["jenie"]
+            API[API<br/>FastAPI · /ask]
+            IDX[Indexer<br/>Job]
+            PG[(CloudNativePG<br/>pgvector + tsvector)]
+            S3[(SeaweedFS<br/>backup target)]
+        end
+
+        subgraph obs["monitoring"]
+            PROM[Prometheus]
+            SLOTH[Sloth → burn-rate alerts]
+        end
+
+        FLAG[Flagger<br/>canary + rollback]
+    end
+
+    GW -->|HTTPRoute| API
+    API --> PG
+    IDX --> PG
+    PG -->|WAL + base backups| S3
+    API -->|/metrics| PROM
+    PROM --> SLOTH
+    PROM --> FLAG
+    FLAG -->|shifts traffic| GW
 ```
 
-Two services and one job. The indexer runs to completion and exits; the API is the only
-long-lived process.
+**Terraform owns only what Flux cannot source from git**: the cluster, the
+SOPS age key, and the deploy key image automation commits with. Everything
+else is reconciled from this repository. After bootstrap, `kubectl apply` is
+a debugging tool, not a deployment tool.
 
 ---
 
-## Quick start
+## Run it
 
-```bash
-cp .env.example .env          # defaults work offline — LLM_BASE_URL unset uses the stub
-make up                       # postgres, floci, api, worker, prometheus, grafana
-make index                    # index ./data into pgvector
-curl -s localhost:8080/healthz
-curl -s -X POST localhost:8080/ask \
-  -H 'Content-Type: application/json' \
-  -d '{"query":"..."}' | jq
-make eval                     # run the evaluation set
+Prerequisites: `docker`, `kind`, `terraform`, `helm`, `kustomize`, `age`,
+`sops`, `kubectl`.
+
+```sh
+make bootstrap       # once: generate the SOPS age key, pin GitHub's host key
+make images          # build the API, indexer and pgvector images
+make up-dev          # create the cluster, install Flux, reconcile from git
 ```
 
-| Service | URL |
-|---|---|
-| API | http://localhost:8080 |
-| Prometheus | http://localhost:9090 |
-| Grafana | http://localhost:3000 (admin / `GRAFANA_PASSWORD`) |
+Roughly three minutes. Flux then pulls this repository and builds the rest.
 
-**Hosted demo:** TODO — URL, and a note that compose is the guaranteed path.
+```sh
+make status          # what Flux thinks of the world
+make smoke           # is the gateway answering
+curl localhost:8080/readyz
+```
+
+### Ask it something
+
+```sh
+curl -s localhost:8080/ask -H 'content-type: application/json' \
+  -d '{"query":"Why is externalTrafficPolicy set to Cluster?"}' | jq
+```
+
+```json
+{
+  "answer": "Under `Local`, a node only answers a NodePort if it hosts an endpoint...",
+  "sources": [
+    {"title": "Gateway and routing › externalTrafficPolicy",
+     "path": "gateway-and-routing.md", "score": 1.0}
+  ],
+  "latency_ms": 287
+}
+```
+
+### Evaluate retrieval
+
+```sh
+make eval            # or: python scripts/eval.py --url http://localhost:8080
+```
+
+```
+PASS  external-traffic-policy    rank 1
+PASS  pgvector-extension         rank 1
+PASS  canary-gates               rank 1
+PASS  slo-buckets                rank 1
+PASS  backup-gap                 rank 1
+PASS  secrets-ownership          rank 1
+PASS  refusal-out-of-corpus      declined
+
+7/7 passed (100%), precision@1 6/6 (100%), p95 330ms
+```
+
+The last case asserts the service **declines** an out-of-corpus question and
+cites nothing. A service that cannot say "I don't know" is worse than one
+that is sometimes wrong.
+
+### Dashboards
+
+```sh
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80
+# http://localhost:3000 — admin / prom-operator
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:9090
+# http://localhost:9090/alerts
+```
+
+### Production
+
+```sh
+make up-prod         # second cluster, ports 80/443
+make status ENV=prod
+make canary ENV=prod # watch a progressive rollout
+```
 
 ---
 
-## Repository map
+## Environment variables
 
-| Path | What |
-|---|---|
-| `api/` | FastAPI service — `/ask`, `/healthz`, `/readyz`, `/metrics` |
-| `worker/` | Indexer job |
-| `jenie/` | Shared library: config, retrieval, model backends, telemetry |
-| `infra/terraform/` | AWS modules, `dev` and `prod` environments |
-| `observability/` | Prometheus scrape config and alert rules, provisioned Grafana |
-| `scripts/` | Evaluation harness, load generator |
-| `data/` | The corpus |
+Everything is env-driven; nothing is hardcoded. In the cluster these come
+from `kubernetes/apps/jenie/base/config.yaml` and CloudNativePG's generated
+secret.
 
----
-
-## Configuration
-
-Every knob is an environment variable; see `.env.example`. The one worth calling out:
-
-**`LLM_BASE_URL` selects the model backend and nothing else does.** ollama, vLLM,
-Bedrock through Floci and the offline stub are the same code path with a different URL.
-Leaving it unset selects the stub, which is what CI uses — tests must not require a GPU.
+| variable | default | notes |
+|---|---|---|
+| `PGHOST` `PGPORT` `PGUSER` `PGPASSWORD` `PGDATABASE` | — | CNPG publishes these as `jenie-pg-app` |
+| `DATABASE_URL` | unset | overrides the above |
+| `EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` | 384-dim ONNX, baked into the image |
+| `EMBEDDING_DIM` | `384` | part of the table schema — changing it means reindexing |
+| `LLM_BASE_URL` | unset | **unset selects the deterministic stub.** Point at vLLM or Ollama to use a real model; no code changes |
+| `LLM_MODEL` | `stub` | |
+| `LLM_COST_PER_MTOK_IN` / `_OUT` | `0` | feeds `rag_cost_usd_total` |
+| `CHUNK_SIZE` / `CHUNK_OVERLAP` | `512` / `64` | |
+| `RETRIEVAL_TOP_K` | `5` | |
+| `RETRIEVAL_MIN_SIMILARITY` | `0.55` | below this the service declines |
+| `DATA_DIR` | `data` | the corpus |
 
 ---
 
-## Observability
+## Layout
 
-Stated objectives, which the alert rules in `observability/prometheus/rules/` defend:
-
-| SLO | Target |
-|---|---|
-| Availability | 99% of `/ask` requests succeed, 30-day window |
-| Latency | 95% of `/ask` requests complete within 3s |
-| Retrieval | 95% of vector searches complete within 250ms |
-
-Retrieval and generation are **separate** histograms. Blended into one request duration you
-cannot tell a slow vector search from a slow model, which is the first question anyone asks
-when `/ask` gets slow.
-
-Cost is tracked as `rag_cost_usd_total`, priced from configured per-1k-token rates rather
-than hardcoded constants, because pricing is per model and changes.
-
-TODO: paste the Grafana screenshot and the output of `make eval`.
-
----
-
-## Security
-
-See [SECURITY.md](SECURITY.md). Summary: no secrets in the repository, dependency and image
-scanning gate the pipeline, the container runs as a non-root user from a minimal base, and
-**the infrastructure pipeline holds no cloud credentials at all** — see below.
+```
+infrastructure/     Terraform — cluster, Flux, bootstrap secrets
+kubernetes/
+  clusters/         Flux entrypoints, one directory per cluster
+  infrastructure/   controllers and their configuration
+  apps/jenie/       the service, base + dev/prod overlays
+  charts/           service-policy (routing, delivery, policy) and vendored sloth
+jenie/              shared library — chunking, embeddings, store, RAG
+api/ worker/        the two images
+data/               the knowledge base, 13 documents
+scripts/            evaluation and load generation
+docs/               runbooks and decisions
+```
 
 ---
 
 ## Trade-offs
 
-> TODO — this section is the point. Each entry: what you chose, what you gave up, and when
-> you would choose differently. Keep them honest; a reviewer trusts a stated limitation more
-> than an unstated one.
+Read [`docs/decisions.md`](docs/decisions.md). It covers what was built, what
+was deliberately not built, and the places this is more platform than the
+brief asked for — including what would be cut for a smaller team.
 
-**Postgres with pgvector, rather than a dedicated vector database.** TODO — one store to
-operate, back up and reason about; hybrid search without a second system; and at this corpus
-size the index fits comfortably in memory. Name the point at which this stops being true.
+Operational procedures are in [`docs/runbooks/`](docs/runbooks/), including a
+[disaster recovery runbook](docs/runbooks/dr-restore.md) that states what the
+backup strategy does *not* protect against.
 
-**Hybrid retrieval rather than pure semantic search.** TODO — operations questions are full
-of exact tokens (error codes, flag names, hostnames) that embeddings blur. Reciprocal rank
-fusion merges both rankings without needing the scores to be comparable.
-
-**LlamaIndex rather than a hand-written retrieval pipeline.** TODO — the platform engineer's
-job here is to make the workload deployable and observable, not to reimplement chunking.
-Mention that you have written a hybrid-retrieval indexer from scratch on a separate project,
-so this is a scope decision rather than an ability one.
-
-**Schema created idempotently on start rather than via a migration runner.** TODO — one
-fewer moving part in the critical path at this size; name the point where versioned
-migrations become correct.
-
-**Infrastructure validated against a local AWS emulator rather than a live account.** The
-Terraform in `infra/` is applied and destroyed against [Floci](https://github.com/floci-io/floci)
-on every pull request, so the modules are proven to apply — but the pipeline holds no AWS
-credentials and the assignment costs nothing to run. This validates the resource graph and
-the API calls; it does **not** validate real IAM evaluation, VPC routing or load balancer
-behaviour, and that distinction is deliberate rather than overlooked.
-
----
-
-## What I would do next
-
-> TODO — scope control reads as judgment; silent gaps read as not knowing. Candidates:
-> incremental reindexing with content hashing, OpenTelemetry tracing end to end, a canary
-> deployment with automated rollback on the error-rate SLO, reranking after retrieval,
-> prompt and model-config versioning, autoscaling the API on p95 rather than CPU.
-
----
-
-## Assignment notes
-
-Submitted for the Jenosize AI DevOps Engineer test assignment.
+Security posture and threat assumptions are in [`SECURITY.md`](SECURITY.md).
