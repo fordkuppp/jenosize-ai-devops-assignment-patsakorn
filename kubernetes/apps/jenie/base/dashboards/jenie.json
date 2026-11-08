@@ -133,7 +133,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "100 * sum(rate(http_requests_total{job=\"jenie/jenie-api\",handler=\"/ask\",status=~\"5..\"}[5m])) / clamp_min(sum(rate(http_requests_total{job=\"jenie/jenie-api\",handler=\"/ask\"}[5m])), 0.001)",
+          "expr": "100 * (sum(rate(http_requests_total{job=\"jenie/jenie-api\",handler=\"/ask\",status=~\"5..\"}[5m])) or vector(0)) / clamp_min(sum(rate(http_requests_total{job=\"jenie/jenie-api\",handler=\"/ask\"}[5m])), 0.001)",
           "range": true,
           "instant": false,
           "refId": "A"
@@ -864,7 +864,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(rag_cost_usd_total[1h])) / clamp_min(sum(rate(http_requests_total{handler=\"/ask\"}[1h])), 0.001)",
+          "expr": "(sum(rate(rag_cost_usd_total[1h])) or vector(0)) / clamp_min(sum(rate(http_requests_total{handler=\"/ask\"}[1h])), 0.001)",
           "range": true,
           "instant": false,
           "refId": "A"

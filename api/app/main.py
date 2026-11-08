@@ -80,6 +80,7 @@ def readyz() -> dict[str, object]:
     try:
         with app.state.pool.connection() as conn:
             n = store.count(conn)
+            indexed_at = store.last_indexed(conn)
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"database unavailable: {exc}") from exc
     if n == 0:
@@ -87,6 +88,7 @@ def readyz() -> dict[str, object]:
         # serve even though it is perfectly healthy.
         raise HTTPException(status_code=503, detail="index is empty")
     telemetry.INDEX_DOCUMENTS.set(n)
+    telemetry.INDEX_LAST_SUCCESS.set(indexed_at)
     return {"status": "ready", "chunks": n}
 
 

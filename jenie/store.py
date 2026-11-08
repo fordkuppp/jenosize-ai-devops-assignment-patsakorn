@@ -145,6 +145,17 @@ def count(conn: psycopg.Connection) -> int:
     return conn.execute("SELECT count(*) FROM chunks").fetchone()[0]
 
 
+def last_indexed(conn: psycopg.Connection) -> float:
+    """Unix time of the newest chunk, or 0.0 when the index is empty.
+
+    Index freshness has to be derived from the table rather than recorded by
+    the indexer: the indexer is a Job that exits, so a gauge it sets is never
+    scraped. The table is the only durable record of when indexing last ran.
+    """
+    row = conn.execute("SELECT EXTRACT(EPOCH FROM max(indexed_at)) FROM chunks").fetchone()
+    return float(row[0]) if row and row[0] is not None else 0.0
+
+
 def search(
     conn: psycopg.Connection, *, query_vec, text: str, k: int, candidates: int
 ) -> list[Hit]:
