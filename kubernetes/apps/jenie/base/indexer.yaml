@@ -28,14 +28,22 @@ spec:
         # the very failure this guards against.
         - name: wait-for-pg
           image: ghcr.io/fordkuppp/postgres-pgvector:17
+          # -U is not optional here. The pod runs as uid 10001, which has no
+          # /etc/passwd entry, so libpq cannot infer a default username and
+          # pg_isready exits 3 ("no attempt") without ever opening a socket —
+          # indistinguishable, in the logs, from Postgres being down.
           command:
             - sh
             - -c
             - |
-              until pg_isready -h jenie-pg-rw -p 5432 -d jenie -t 5; do
+              until pg_isready -h jenie-pg-rw -p 5432 -U "$PGUSER" -d jenie -t 5; do
                 echo "waiting for jenie-pg-rw"
                 sleep 5
               done
+          env:
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef: { name: jenie-pg-app, key: username }
           resources:
             requests: { cpu: 10m, memory: 32Mi }
             limits: { cpu: 100m, memory: 64Mi }
