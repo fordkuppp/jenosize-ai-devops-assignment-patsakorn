@@ -36,11 +36,12 @@ target:
   # These select pods directly rather than through the workload.
   #
   # It must NOT be the label in the Deployment's spec.selector. Flagger
-  # rewrites that one to <target>-primary and <target>-canary when it takes
-  # over, after which anything selecting the original value matches zero
-  # pods — and a NetworkPolicy matching zero pods denies nothing, a PDB
-  # protects nothing, and a PodMonitor scrapes nothing. All three fail
-  # silently and report healthy.
+  # creates a <target>-primary Deployment whose selector label is
+  # <original>-primary and keeps the original Deployment as the canary, so
+  # a selector on the original label covers only the canary — which is
+  # scaled to zero at rest. A NetworkPolicy matching zero pods denies
+  # nothing, a PDB protects nothing, a PodMonitor scrapes nothing, and all
+  # three report healthy while doing so.
   selector: {}
     # app.kubernetes.io/part-of: jenie
 

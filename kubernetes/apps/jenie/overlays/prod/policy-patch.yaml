@@ -53,26 +53,31 @@ spec:
             thresholdRange: { max: 40 }
             interval: 1m
       metricTemplates:
-        # Scoped to the canary pods by name. Flagger substitutes {{ target }}
-        # and {{ namespace }}; Envoy cannot distinguish the two backends
-        # because Envoy Gateway emits one cluster per HTTPRoute rule, so the
-        # gates read the application's own metrics instead.
+        # Scoped to the canary pods by name. Envoy cannot distinguish the
+        # two backends — Envoy Gateway emits one cluster per HTTPRoute rule
+        # — so the gates read the application's own metrics instead.
+        #
+        # The canary is the ORIGINAL Deployment: Flagger builds a separate
+        # <target>-primary for the stable version and leaves the original
+        # carrying the new one. So canary pods are "<target>-<hash>-<id>"
+        # and the filter is "starts with target, is not -primary". There is
+        # no "<target>-canary" Deployment, only a Service of that name.
         - name: canary-success-rate
           query: |
             100 * (
-              sum(rate(http_requests_total{namespace="{{ namespace }}",pod=~"{{ target }}-canary-.*",status!~"5.."}[{{ interval }}]))
+              sum(rate(http_requests_total{namespace="{{ namespace }}",pod=~"{{ target }}-.*",pod!~"{{ target }}-primary-.*",status!~"5.."}[{{ interval }}]))
               /
-              clamp_min(sum(rate(http_requests_total{namespace="{{ namespace }}",pod=~"{{ target }}-canary-.*"}[{{ interval }}])), 0.001)
+              clamp_min(sum(rate(http_requests_total{namespace="{{ namespace }}",pod=~"{{ target }}-.*",pod!~"{{ target }}-primary-.*"}[{{ interval }}])), 0.001)
             )
         - name: canary-latency-p95
           query: |
             histogram_quantile(0.95,
-              sum by (le) (rate(http_request_duration_seconds_bucket{namespace="{{ namespace }}",pod=~"{{ target }}-canary-.*"}[{{ interval }}]))
+              sum by (le) (rate(http_request_duration_seconds_bucket{namespace="{{ namespace }}",pod=~"{{ target }}-.*",pod!~"{{ target }}-primary-.*"}[{{ interval }}]))
             )
         - name: rag-refusal-rate
           query: |
             100 * (
-              sum(rate(rag_answers_total{namespace="{{ namespace }}",pod=~"{{ target }}-canary-.*",outcome="refused"}[{{ interval }}]))
+              sum(rate(rag_answers_total{namespace="{{ namespace }}",pod=~"{{ target }}-.*",pod!~"{{ target }}-primary-.*",outcome="refused"}[{{ interval }}]))
               /
-              clamp_min(sum(rate(rag_answers_total{namespace="{{ namespace }}",pod=~"{{ target }}-canary-.*"}[{{ interval }}])), 0.001)
+              clamp_min(sum(rate(rag_answers_total{namespace="{{ namespace }}",pod=~"{{ target }}-.*",pod!~"{{ target }}-primary-.*"}[{{ interval }}])), 0.001)
             )
