@@ -66,6 +66,12 @@ spec:
           # To swap back: restore the line below and the $imagepolicy marker.
           #   image: ghcr.io/fordkuppp/jenie-api:v0.1.0 # {"$imagepolicy": "flux-system:jenie-api"}
           image: ghcr.io/stefanprodan/podinfo:6.9.2 # {"$imagepolicy": "flux-system:jenie-api"}
+          # `command` is required, not optional, here. podinfo's image declares
+          # CMD ["./podinfo"] and no ENTRYPOINT; Kubernetes `args` replaces
+          # CMD, so with nothing to prepend them to the args become the
+          # command and the runtime tries to exec "--port=8000" as a binary.
+          command:
+            - ./podinfo
           args:
             - --port=8000
           ports:
