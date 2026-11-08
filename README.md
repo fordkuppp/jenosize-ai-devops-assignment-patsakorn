@@ -194,6 +194,8 @@ secret.
 
 ```
 infrastructure/     Terraform — cluster, Flux, bootstrap secrets
+  terraform/        modules and per-environment stacks
+  images/           the pgvector operand image
 kubernetes/
   clusters/         Flux entrypoints, one directory per cluster
   infrastructure/   controllers and their configuration

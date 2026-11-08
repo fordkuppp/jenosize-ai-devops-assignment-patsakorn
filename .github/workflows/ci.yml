@@ -135,3 +135,216 @@ jobs:
               -schema-location default -schema-location "$SCHEMA"
             echo "::endgroup::"
           done
+
+  images:
+    name: build · scan · push
+    runs-on: ubuntu-latest
+    needs: [python]
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: jenie-api
+            dockerfile: api/Dockerfile
+          - name: jenie-indexer
+            dockerfile: worker/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          # Load into the local daemon rather than pushing: the image is
+          # scanned before it is allowed anywhere a cluster can pull it.
+          load: true
+          push: false
+          tags: ${{ matrix.name }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,scope=${{ matrix.name }},mode=max
+
+      - name: trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ matrix.name }}:${{ github.sha }}
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          # Fails the build. A scanner that only reports is a scanner nobody
+          # reads — and this runs before the push, so a vulnerable image
+          # never reaches a registry a cluster can pull from.
+          exit-code: "1"
+
+      - name: log in to ghcr
+        if: github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: push
+        if: github.ref == 'refs/heads/main'
+        # Tagged by commit SHA, not latest. A running container maps back to
+        # an exact commit, which is what makes image automation's semver
+        # policy meaningful rather than a guess.
+        run: |
+          IMAGE=ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}
+          docker tag ${{ matrix.name }}:${{ github.sha }} "$IMAGE:sha-${GITHUB_SHA::12}"
+          docker push "$IMAGE:sha-${GITHUB_SHA::12}"
+
+  e2e-app:
+    name: e2e · rag pipeline
+    runs-on: ubuntu-latest
+    needs: [python]
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: jenie
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: jenie
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U jenie"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: jenie
+      PGPASSWORD: ci
+      PGDATABASE: jenie
+      DATA_DIR: data
+      # Unset LLM_BASE_URL selects the deterministic stub. No GPU, no model
+      # server, no network dependency on a provider.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.5.14"
+      - name: install
+        run: |
+          uv venv .venv
+          VIRTUAL_ENV=.venv uv pip install -e '.[dev]'
+
+      - name: index the corpus
+        run: .venv/bin/python -m worker.indexer.run
+
+      - name: serve
+        run: |
+          .venv/bin/uvicorn api.app.main:app --host 127.0.0.1 --port 8000 &
+          for i in $(seq 1 40); do
+            curl -sf -o /dev/null http://127.0.0.1:8000/readyz && break
+            sleep 3
+          done
+          curl -sf http://127.0.0.1:8000/readyz
+
+      - name: evaluate retrieval
+        # The gate. Exits non-zero below the pass-rate threshold, so a change
+        # that quietly degrades retrieval fails the build rather than
+        # shipping and being noticed later.
+        run: .venv/bin/python scripts/eval.py --url http://127.0.0.1:8000
+
+      - name: assert the SLO metric contract
+        # Every threshold in slo.yaml must exist as a histogram bucket
+        # boundary. Prometheus cannot interpolate, so a missing boundary
+        # makes the objective silently measure nothing — this catches that
+        # at build time instead of in a dashboard weeks later.
+        run: |
+          M=$(curl -sf http://127.0.0.1:8000/metrics)
+          fail=0
+          for want in \
+            'http_request_duration_seconds_bucket.*le="2.5"' \
+            'rag_retrieval_duration_seconds_bucket.*le="0.5"' \
+            'rag_answers_total' 'rag_tokens_total' 'rag_cost_usd_total' \
+            'rag_retrieval_score_bucket' 'rag_index_documents'; do
+            if echo "$M" | grep -qE "$want"; then
+              echo "  ok   $want"
+            else
+              echo "  MISSING  $want"; fail=1
+            fi
+          done
+          exit $fail
+
+  e2e-cluster:
+    name: e2e · platform installs
+    runs-on: ubuntu-latest
+    needs: [validate]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.19.0
+      - name: install kustomize + flux
+        run: |
+          curl -sSL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" | tar xz
+          sudo mv kustomize /usr/local/bin/
+          curl -sSL https://fluxcd.io/install.sh | sudo bash
+
+      - uses: helm/kind-action@v1
+        # A default single-node cluster, not the dev topology. That lives in
+        # HCL inside modules/kind-cluster and cannot be shared with this
+        # action, so CI deliberately tests a different thing: that the
+        # manifests install and the controllers converge. It does NOT
+        # reproduce the multi-node case — which is exactly where the
+        # externalTrafficPolicy bug lived, so a green run here is not
+        # evidence that host networking works.
+        with:
+          cluster_name: e2e
+          wait: 120s
+
+      - name: install flux controllers
+        # The real controllers, without the git sync. This job proves the
+        # manifests install and the controllers converge; it does not prove
+        # the GitOps loop, which needs a pushed branch to reconcile from.
+        run: |
+          flux install --components-extra=image-reflector-controller,image-automation-controller
+          kubectl -n flux-system wait --for=condition=available --timeout=180s deploy --all
+
+      - name: apply the controllers layer
+        run: kustomize build kubernetes/infrastructure/controllers/overlays/dev | kubectl apply -f -
+
+      - name: wait for every HelmRelease
+        run: |
+          echo "waiting for HelmReleases to become ready..."
+          if ! kubectl wait --for=condition=ready --timeout=900s helmrelease --all -A; then
+            echo "::group::failures"
+            kubectl get helmrelease -A
+            kubectl get helmrelease -A -o json | python3 -c "
+          import sys, json
+          for i in json.load(sys.stdin)['items']:
+              c = [x for x in i.get('status', {}).get('conditions', []) if x['type'] == 'Ready']
+              if not c or c[0]['status'] != 'True':
+                  print(i['metadata']['namespace'] + '/' + i['metadata']['name'], '::', (c[0]['message'] if c else 'no condition'))
+          "
+            echo "::endgroup::"
+            exit 1
+          fi
+          kubectl get helmrelease -A
+
+      - name: apply the gateway configuration
+        run: kustomize build kubernetes/infrastructure/configs | kubectl apply -f -
+
+      - name: assert the gateway programs
+        # The claim: a Gateway reaches Programmed, which means Envoy Gateway
+        # provisioned a data plane and assigned it an address. That is the
+        # thing a broken EnvoyProxy patch silently prevents.
+        run: |
+          kubectl -n envoy-gateway-system wait --for=condition=Programmed --timeout=300s gateway/external
+          kubectl get gatewayclass,gateway -A
+          kubectl -n envoy-gateway-system get svc -l gateway.envoyproxy.io/owning-gateway-name=external \
+            -o jsonpath='{range .items[0].spec.ports[*]}port={.port} nodePort={.nodePort}{"\n"}{end}'
+
+      - name: diagnostics on failure
+        if: failure()
+        run: |
+          kubectl get events -A --field-selector type=Warning --sort-by=.lastTimestamp | tail -30
+          kubectl get pods -A
