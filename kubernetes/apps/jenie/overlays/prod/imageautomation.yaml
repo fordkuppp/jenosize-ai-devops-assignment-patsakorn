@@ -1,0 +1,87 @@
+# The only write credential in the system.
+#
+# Reconciliation reads the repo over public HTTPS with no credential at all.
+# Only this path needs a key, and it is a repo-scoped deploy key rather than a
+# user PAT: its blast radius is one repository, it cannot read any other, and
+# revoking it breaks nothing but automated tag bumps.
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: jenie-push
+  namespace: flux-system
+spec:
+  interval: 10m
+  url: ssh://git@github.com/fordpatsakorn/jenosize-ai-devops-assignment-patsakorn.git
+  ref:
+    branch: main
+  secretRef:
+    name: flux-image-automation
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: jenie-api
+  namespace: flux-system
+spec:
+  image: ghcr.io/fordpatsakorn/jenie-api
+  interval: 5m
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: jenie-api
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: jenie-api
+  policy:
+    semver:
+      range: ">=0.1.0"
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: jenie-indexer
+  namespace: flux-system
+spec:
+  image: ghcr.io/fordpatsakorn/jenie-indexer
+  interval: 5m
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: jenie-indexer
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: jenie-indexer
+  policy:
+    semver:
+      range: ">=0.1.0"
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageUpdateAutomation
+metadata:
+  name: jenie
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: jenie-push
+  git:
+    checkout:
+      ref:
+        branch: main
+    commit:
+      author:
+        name: fluxcdbot
+        email: fluxcdbot@users.noreply.github.com
+      messageTemplate: |
+        chore(deploy): {{ range .Changed.Changes }}{{ .OldValue }} -> {{ .NewValue }} {{ end }}
+    push:
+      branch: main
+  update:
+    path: ./kubernetes/apps/jenie
+    strategy: Setters

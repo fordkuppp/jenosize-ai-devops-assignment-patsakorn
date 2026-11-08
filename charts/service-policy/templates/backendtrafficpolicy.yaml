@@ -1,0 +1,40 @@
+{{- if or .Values.rateLimit.enabled .Values.circuitBreaker.enabled .Values.retry.enabled }}
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: {{ include "service-policy.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "service-policy.labels" . | nindent 4 }}
+spec:
+  # Attaches to the HTTPRoute — whether this chart rendered it or Flagger did.
+  # Both use the same name, which is why that name is derived from target.name
+  # in one helper rather than written twice.
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: {{ include "service-policy.fullname" . }}
+  {{- if .Values.rateLimit.enabled }}
+  rateLimit:
+    type: {{ .Values.rateLimit.type }}
+    {{- if eq .Values.rateLimit.type "Local" }}
+    local:
+      rules:
+        - limit:
+            requests: {{ .Values.rateLimit.requests }}
+            unit: {{ .Values.rateLimit.unit }}
+    {{- end }}
+  {{- end }}
+  {{- if .Values.circuitBreaker.enabled }}
+  circuitBreaker:
+    maxParallelRequests: {{ .Values.circuitBreaker.maxParallelRequests }}
+    maxPendingRequests: {{ .Values.circuitBreaker.maxPendingRequests }}
+  {{- end }}
+  {{- if .Values.retry.enabled }}
+  retry:
+    numRetries: {{ .Values.retry.numRetries }}
+    retryOn:
+      triggers:
+        {{- toYaml .Values.retry.retryOn | nindent 8 }}
+  {{- end }}
+{{- end }}

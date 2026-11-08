@@ -1,0 +1,203 @@
+# service-policy — the platform layer for services on the paved road.
+#
+# This chart owns NO workload. Deployments, Pods, Services, ConfigMaps and
+# Secrets come from app-template or plain manifests, which already do that job
+# well and have had years of design iteration. Rebuilding them adds nothing.
+#
+# What has no paved road is the layer above the pod: routing, traffic policy,
+# progressive delivery, and SLO-backed alerting. A new service at Jenosize
+# needs all four on day one, and today each team invents them. That is the
+# entire scope of this chart.
+#
+# Consequence: there is no `podTemplate` here, and no asymmetry between a
+# Deployment and a Job — the chart never sees either. It takes a reference.
+
+
+nameOverride: ""
+fullnameOverride: ""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# target — the single input. Everything else is policy applied to this.
+# ─────────────────────────────────────────────────────────────────────────────
+target:
+  # The workload Flagger drives and the HPA scales.
+  kind: Deployment          # Deployment | StatefulSet | DaemonSet
+  name: ""                  # required
+
+  # The Service in front of it. Under a non-rolling strategy Flagger derives
+  # -primary and -canary from this spec and takes ownership of the apex.
+  service:
+    name: ""                # defaults to target.name
+    port: 8000
+    targetPort: http
+
+  # Pod selector for NetworkPolicy and PodDisruptionBudget. These select pods
+  # directly rather than through the workload, so they need labels, not a name.
+  selector: {}
+    # app.kubernetes.io/name: jenie-api
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Routing — Gateway API. Ingress is retired (SIG Network, March 2026), so
+# HTTPRoute is the only forward-looking option here.
+#
+# NOTE: rendered ONLY when strategy.type == RollingUpdate. Under any Flagger
+# strategy the Canary owns the HTTPRoute and rewrites backendRef weights on
+# every analysis step; a Helm-managed route would fight it indefinitely.
+# ─────────────────────────────────────────────────────────────────────────────
+route:
+  enabled: true
+  gateway:
+    name: jenie
+    namespace: envoy-gateway-system
+    sectionName: http
+  hostnames: []
+  path: /
+  timeouts:
+    # LLM generation routinely exceeds Envoy's default, and the failure shows
+    # up as 504s that look like application errors.
+    request: 30s
+    backendRequest: 30s
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Traffic policy — Envoy Gateway BackendTrafficPolicy.
+#
+# Rate limiting as typed, schema-validated config rather than an annotation
+# string. This is the chart's answer to the "rate limiting" requirement.
+# ─────────────────────────────────────────────────────────────────────────────
+rateLimit:
+  enabled: true
+  type: Local               # Local (per-proxy) | Global (needs a rate-limit svc)
+  requests: 60
+  unit: Minute
+  burst: 10
+
+circuitBreaker:
+  enabled: true
+  maxParallelRequests: 100
+  maxPendingRequests: 50
+
+retry:
+  enabled: false
+  numRetries: 2
+  retryOn: ["5xx", "reset"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Network policy — default-deny, then explicit allows.
+# ─────────────────────────────────────────────────────────────────────────────
+networkPolicy:
+  enabled: true
+  allowDNS: true
+  allowFrom:
+    - namespace: envoy-gateway-system
+    - namespace: monitoring
+  allowTo: []
+    # - podSelector: {cnpg.io/cluster: jenie-pg}
+    #   ports: [5432]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Progressive delivery — Flagger.
+#
+# `rollingUpdate` is not an alternative to the other types. It lives on the
+# workload and always applies; it governs how the primary itself rolls once a
+# canary is promoted. `type` only decides whether a Canary wraps that inner
+# mechanism. (Set it on the workload chart, not here — noted for the reader.)
+# ─────────────────────────────────────────────────────────────────────────────
+strategy:
+  type: RollingUpdate       # RollingUpdate | Canary | BlueGreen | ABTest
+
+  canary:
+    stepWeight: 10
+    maxWeight: 50
+    stepWeightPromotion: 100
+
+  blueGreen:
+    iterations: 10
+    mirror: false           # shadow live traffic at 0% exposure
+
+  abTest:
+    iterations: 10
+    match:
+      - headers:
+          x-canary:
+            exact: "true"
+
+  # Shared by Canary / BlueGreen / ABTest — only the traffic mechanics above
+  # differ, so this is a sibling rather than three copies of one schema.
+  analysis:
+    interval: 30s
+    threshold: 5            # failed checks before automatic rollback
+    maxRetries: 3
+    progressDeadlineSeconds: 600
+
+    metrics:
+      - name: request-success-rate
+        thresholdRange:
+          min: 99
+        interval: 1m
+      - name: request-duration
+        thresholdRange:
+          max: 3000
+        interval: 1m
+
+    # Mandatory, not optional. With no synthetic traffic during analysis there
+    # are no samples to evaluate, so the canary stalls silently rather than
+    # failing — the worst possible failure mode to debug on a deadline.
+    # Rendered through `tpl`, so Helm expressions are allowed.
+    webhooks:
+      - name: load-test
+        type: rollout
+        url: http://flagger-loadtester.flagger-system/
+        metadata:
+          cmd: >-
+            hey -z 1m -q 5 -c 2
+            http://{{ .Values.target.name }}-canary:{{ .Values.target.service.port }}/healthz
+
+  # App-specific Flagger MetricTemplates, rendered verbatim. The chart stays
+  # generic by knowing nothing about them; the consumer ships its own and
+  # names them in analysis.metrics above.
+  metricTemplates: []
+    # - name: rag-refusal-rate
+    #   query: |
+    #     sum(rate(rag_answers_total{outcome="refused"}[{{ "{{ interval }}" }}]))
+    #       / sum(rate(rag_answers_total[{{ "{{ interval }}" }}])) * 100
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Scaling and disruption
+# ─────────────────────────────────────────────────────────────────────────────
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior: {}
+
+podDisruption:
+  enabled: false
+  minAvailable: 1
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Observability
+# ─────────────────────────────────────────────────────────────────────────────
+podMonitor:
+  # A PodMonitor rather than a ServiceMonitor: under Flagger the Service set
+  # churns across a rollout (apex / -primary / -canary), while pod labels stay
+  # stable, and the canary's own metrics have to stay distinguishable.
+  enabled: true
+  port: http              # container port NAME, not number
+  path: /metrics
+  interval: 15s
+  scrapeTimeout: 10s
+  labels: {}

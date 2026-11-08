@@ -1,0 +1,42 @@
+# Progressive delivery with an app-supplied metric template and an HPA,
+# which together exercise the autoscalerRef wiring.
+target:
+  name: jenie-api
+  service:
+    port: 8000
+    targetPort: http
+  selector:
+    app.kubernetes.io/name: jenie-api
+route:
+  gateway:
+    name: jenie
+    namespace: envoy-gateway-system
+  hostnames:
+    - jenie.local
+strategy:
+  type: Canary
+  analysis:
+    metrics:
+      - name: request-success-rate
+        thresholdRange:
+          min: 99
+        interval: 1m
+      - name: rag-refusal-rate
+        thresholdRange:
+          max: 40
+        interval: 1m
+  metricTemplates:
+    - name: rag-refusal-rate
+      query: |
+        sum(rate(rag_answers_total{outcome="refused"}[1m]))
+          / sum(rate(rag_answers_total[1m])) * 100
+autoscaling:
+  enabled: true
+podDisruption:
+  enabled: true
+networkPolicy:
+  enabled: true
+  allowTo:
+    - podSelector:
+        cnpg.io/cluster: jenie-pg
+      ports: [5432]

@@ -1,0 +1,11 @@
+# The floor: a service that routes and is scraped. No canary, no autoscaling.
+target:
+  name: demo-api
+  selector:
+    app.kubernetes.io/name: demo-api
+route:
+  gateway:
+    name: demo
+    namespace: envoy-gateway-system
+networkPolicy:
+  enabled: false

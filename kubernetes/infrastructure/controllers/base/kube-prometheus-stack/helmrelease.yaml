@@ -1,0 +1,84 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kube-prometheus-stack
+  namespace: monitoring
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: kube-prometheus-stack
+      version: "*"          # pin before submitting; "*" is a review finding
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community
+        namespace: flux-system
+  install:
+    crds: Create
+    remediation:
+      retries: 3
+  upgrade:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+
+  values:
+    # ── Alert hygiene ────────────────────────────────────────────────────
+    #
+    # The stack ships ~100 alerts tuned for a managed production cluster.
+    # Several of them fire permanently on kind, and a dashboard with twelve
+    # alerts permanently red is worse than no alerting: it trains everyone to
+    # ignore the page, so the one that matters gets ignored too.
+    #
+    # Every exclusion below is because the alert is *inapplicable here*, not
+    # because it is inconvenient. Anything suppressed for being noisy rather
+    # than wrong would need a different justification.
+
+    # Disable the ServiceMonitors too, not just the rules — otherwise the
+    # scrape keeps failing and surfaces as a different alert instead.
+    kubeControllerManager:
+      enabled: false        # binds 127.0.0.1 under kubeadm; not scrapeable
+    kubeScheduler:
+      enabled: false        # same
+    kubeProxy:
+      enabled: false        # same
+    kubeEtcd:
+      enabled: false        # kind runs etcd as a static pod with client certs
+                            # we do not mount; scraping it is out of scope
+
+    defaultRules:
+      create: true
+      rules:
+        etcd: false                   # see kubeEtcd above
+        kubeProxy: false
+        kubeSchedulerAlerting: false
+        kubeControllerManager: false
+
+      disabled:
+        # Overcommit is the normal and correct state of a single-node dev
+        # cluster. The alert is right about the condition and wrong about
+        # whether anyone should care.
+        KubeMemoryOvercommit: true
+        KubeCPUOvercommit: true
+
+        # Fires on any container with a CPU limit that ever gets throttled,
+        # which on a laptop-sized node is all of them. Known-noisy upstream.
+        CPUThrottlingHigh: true
+
+    # TODO: point Grafana at this stack's Alertmanager as an external
+    # Alertmanager, so that any future Grafana-managed (cross-datasource)
+    # rule lands in the same routing tree and the same silences. Configure it
+    # now while there are zero such rules, not during an incident.
+    grafana:
+      enabled: true
+
+    prometheus:
+      prometheusSpec:
+        # Pick up PrometheusRules and ServiceMonitors from every namespace,
+        # including the ones Sloth generates into the app namespace.
+        ruleSelectorNilUsesHelmValues: false
+        serviceMonitorSelectorNilUsesHelmValues: false
+        podMonitorSelectorNilUsesHelmValues: false
+        probeSelectorNilUsesHelmValues: false
+        retention: 7d

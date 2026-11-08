@@ -1,0 +1,50 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    # Set explicitly even though the API server adds it: NetworkPolicy peers
+    # select on this label, and relying on an implicit value makes the policy
+    # harder to read than the duplication costs.
+    kubernetes.io/metadata.name: monitoring
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: envoy-gateway-system
+  labels:
+    # Set explicitly even though the API server adds it: NetworkPolicy peers
+    # select on this label, and relying on an implicit value makes the policy
+    # harder to read than the duplication costs.
+    kubernetes.io/metadata.name: envoy-gateway-system
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: flagger-system
+  labels:
+    # Set explicitly even though the API server adds it: NetworkPolicy peers
+    # select on this label, and relying on an implicit value makes the policy
+    # harder to read than the duplication costs.
+    kubernetes.io/metadata.name: flagger-system
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cnpg-system
+  labels:
+    # Set explicitly even though the API server adds it: NetworkPolicy peers
+    # select on this label, and relying on an implicit value makes the policy
+    # harder to read than the duplication costs.
+    kubernetes.io/metadata.name: cnpg-system
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sloth
+  labels:
+    # Set explicitly even though the API server adds it: NetworkPolicy peers
+    # select on this label, and relying on an implicit value makes the policy
+    # harder to read than the duplication costs.
+    kubernetes.io/metadata.name: sloth

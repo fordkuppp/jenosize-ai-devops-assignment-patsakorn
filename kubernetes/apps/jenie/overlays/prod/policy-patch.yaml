@@ -1,0 +1,46 @@
+# prod is where progressive delivery earns its keep: a canary gated on both
+# Envoy's view (did it return errors) and the application's (did it stop
+# answering, did it get more expensive).
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: jenie-api-policy
+  namespace: jenie
+spec:
+  values:
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 6
+    podDisruption:
+      enabled: true
+      minAvailable: 1
+    strategy:
+      type: Canary
+      canary:
+        stepWeight: 20
+        maxWeight: 60
+        stepWeightPromotion: 100
+      analysis:
+        interval: 30s
+        threshold: 3
+        metrics:
+          - name: request-success-rate
+            thresholdRange: { min: 99 }
+            interval: 1m
+          - name: request-duration
+            thresholdRange: { max: 3000 }
+            interval: 1m
+          # The AI-aware gate. A release that starts refusing questions it
+          # used to answer returns 200s, quickly — invisible to both metrics
+          # above. This is the one that catches a bad prompt or a broken
+          # index, and no HTTP signal can.
+          - name: rag-refusal-rate
+            thresholdRange: { max: 40 }
+            interval: 1m
+      metricTemplates:
+        - name: rag-refusal-rate
+          query: |
+            sum(rate(rag_answers_total{namespace="jenie",outcome="refused"}[1m]))
+              /
+            sum(rate(rag_answers_total{namespace="jenie"}[1m])) * 100

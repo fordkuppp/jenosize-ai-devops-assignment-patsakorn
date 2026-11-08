@@ -1,0 +1,10 @@
+# No stepWeight: iterations alone holds the canary at 0% and flips.
+target:
+  name: demo-api
+  selector:
+    app.kubernetes.io/name: demo-api
+strategy:
+  type: BlueGreen
+  blueGreen:
+    iterations: 5
+    mirror: true

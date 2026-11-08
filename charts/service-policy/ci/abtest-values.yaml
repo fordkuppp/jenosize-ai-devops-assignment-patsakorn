@@ -1,0 +1,17 @@
+# Header-matched routing rather than weighted.
+target:
+  name: demo-api
+  selector:
+    app.kubernetes.io/name: demo-api
+strategy:
+  type: ABTest
+  abTest:
+    iterations: 4
+    match:
+      - headers:
+          x-canary:
+            exact: "true"
+rateLimit:
+  enabled: false
+circuitBreaker:
+  enabled: false

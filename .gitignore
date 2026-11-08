@@ -1,18 +1,24 @@
-# binaries
-/bin/
-*.test
-*.out
-
-# local env / secrets
-.env
-*.local
-
-# terraform
+# Terraform
 **/.terraform/
 *.tfstate
 *.tfstate.*
 *.tfplan
 .terraform.lock.hcl
 
-# data produced locally
-/data/.index/
+# Generated kubeconfigs — one per env, written by the kind provider
+**/.kube/
+
+# Secrets seeded into the cluster. Never committed; `make bootstrap` creates
+# them, and losing them means regenerating the age key and re-encrypting.
+.secrets/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Local env
+.env

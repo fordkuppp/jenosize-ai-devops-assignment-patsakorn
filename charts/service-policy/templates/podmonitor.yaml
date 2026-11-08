@@ -1,0 +1,29 @@
+{{- /*
+  A PodMonitor, not a ServiceMonitor.
+
+  Under Flagger the Service set churns — apex, -primary and -canary appear and
+  disappear across a rollout — so a Service-based scrape either misses the
+  canary pods or double-counts them. Pods keep stable labels throughout, and
+  the canary analysis needs the canary's own metrics to be distinguishable.
+*/ -}}
+{{- if .Values.podMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ include "service-policy.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "service-policy.labels" . | nindent 4 }}
+    {{- with .Values.podMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- toYaml .Values.target.selector | nindent 6 }}
+  podMetricsEndpoints:
+    - port: {{ .Values.podMonitor.port }}
+      path: {{ .Values.podMonitor.path }}
+      interval: {{ .Values.podMonitor.interval }}
+      scrapeTimeout: {{ .Values.podMonitor.scrapeTimeout }}
+{{- end }}

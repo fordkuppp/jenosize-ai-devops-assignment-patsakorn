@@ -1,0 +1,36 @@
+# Three Kustomizations with an explicit dependency chain, rather than one.
+# Controllers must be Ready before their CRDs exist; configs (GatewayClass,
+# Gateway) are CRs of those CRDs; apps depend on both. Flux will not retry its
+# way out of a wrong order — dependsOn is what makes a cold start work.
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: infra-controllers
+  namespace: flux-system
+spec:
+  interval: 10m
+  timeout: 15m
+  path: ./kubernetes/infrastructure/controllers/overlays/dev
+  prune: true
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: flux2-sync
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: infra-configs
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: infra-controllers
+  interval: 10m
+  timeout: 10m
+  path: ./kubernetes/infrastructure/configs
+  prune: true
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: flux2-sync

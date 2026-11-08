@@ -1,0 +1,110 @@
+# Sloth generates the recording rules and multi-window multi-burn-rate alerts
+# from this spec. We declare objectives; Sloth derives the windows.
+#
+# pageAlert   → fast burn, wakes someone now
+# ticketAlert → slow burn, lands in a queue
+#
+# `{{.window}}` is Sloth's own templating, not Helm's. These are plain
+# manifests reconciled by Flux, so nothing else touches them.
+---
+apiVersion: sloth.slok.dev/v1
+kind: PrometheusServiceLevel
+metadata:
+  name: jenie-api
+  namespace: jenie
+spec:
+  service: jenie-api
+  labels:
+    owner: platform
+    tier: user-facing
+
+  slos:
+    # ── 1. Availability ────────────────────────────────────────────────────
+    - name: ask-availability
+      objective: 99.0
+      description: >-
+        /ask returns a non-5xx response. 99% over 30d leaves ~7h of budget,
+        which is honest for a single-region service with one database.
+      sli:
+        events:
+          errorQuery: |
+            sum(rate(http_requests_total{job="jenie-api",handler="/ask",status=~"5.."}[{{.window}}]))
+          totalQuery: |
+            sum(rate(http_requests_total{job="jenie-api",handler="/ask"}[{{.window}}]))
+      alerting:
+        name: JenieAskAvailability
+        labels:
+          category: availability
+        annotations:
+          summary: /ask error budget is burning
+          runbook_url: https://github.com/fordpatsakorn/jenosize-ai-devops-assignment-patsakorn/blob/main/docs/runbooks/ask-availability.md
+        pageAlert:
+          labels:
+            severity: critical
+        ticketAlert:
+          labels:
+            severity: warning
+
+    # ── 2. Latency ─────────────────────────────────────────────────────────
+    #
+    # NOTE: le="3.0" must be an actual histogram bucket boundary. Prometheus
+    # cannot interpolate between buckets, so if the instrumentator is not
+    # configured with a 3.0 bucket this query silently measures the wrong
+    # threshold. The SLO and the buckets have to be chosen together.
+    - name: ask-latency
+      objective: 99.0
+      description: >-
+        99% of /ask requests complete within 3s. Chosen because an LLM
+        round-trip dominates the budget and anything tighter would be a
+        promise about the model, not about the platform.
+      sli:
+        raw:
+          errorRatioQuery: |
+            1 - (
+              sum(rate(http_request_duration_seconds_bucket{job="jenie-api",handler="/ask",le="3.0"}[{{.window}}]))
+              /
+              sum(rate(http_request_duration_seconds_count{job="jenie-api",handler="/ask"}[{{.window}}]))
+            )
+      alerting:
+        name: JenieAskLatency
+        labels:
+          category: latency
+        annotations:
+          summary: /ask latency budget is burning
+          runbook_url: https://github.com/fordpatsakorn/jenosize-ai-devops-assignment-patsakorn/blob/main/docs/runbooks/ask-latency.md
+        pageAlert:
+          labels:
+            severity: critical
+        ticketAlert:
+          labels:
+            severity: warning
+
+    # ── 3. Retrieval ───────────────────────────────────────────────────────
+    #
+    # The RAG-specific SLI. Retrieval is the part of /ask the platform
+    # actually controls — generation latency belongs to the model. Splitting
+    # them means a slow model does not burn the budget for a slow index.
+    - name: retrieval-latency
+      objective: 99.0
+      description: 99% of retrievals complete within 500ms.
+      sli:
+        raw:
+          errorRatioQuery: |
+            1 - (
+              sum(rate(rag_retrieval_duration_seconds_bucket{job="jenie-api",le="0.5"}[{{.window}}]))
+              /
+              sum(rate(rag_retrieval_duration_seconds_count{job="jenie-api"}[{{.window}}]))
+            )
+      alerting:
+        name: JenieRetrievalLatency
+        labels:
+          category: latency
+        annotations:
+          summary: Retrieval latency budget is burning — index or pgvector degraded
+          runbook_url: https://github.com/fordpatsakorn/jenosize-ai-devops-assignment-patsakorn/blob/main/docs/runbooks/retrieval-latency.md
+        pageAlert:
+          labels:
+            severity: warning
+        ticketAlert:
+          labels:
+            severity: info

@@ -1,0 +1,39 @@
+{{- /*
+  Rendered ONLY under RollingUpdate.
+
+  Under any Flagger strategy the Canary generates this HTTPRoute itself and
+  rewrites backendRef weights on every analysis step. A Helm-managed route
+  would be reverted by Flagger, then restored by Flux, forever.
+*/ -}}
+{{- if and .Values.route.enabled (not (eq (include "service-policy.flaggerManaged" .) "true")) }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "service-policy.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "service-policy.labels" . | nindent 4 }}
+spec:
+  parentRefs:
+    - name: {{ .Values.route.gateway.name }}
+      namespace: {{ .Values.route.gateway.namespace }}
+      {{- with .Values.route.gateway.sectionName }}
+      sectionName: {{ . }}
+      {{- end }}
+  {{- with .Values.route.hostnames }}
+  hostnames:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: {{ .Values.route.path }}
+      {{- with .Values.route.timeouts }}
+      timeouts:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      backendRefs:
+        - name: {{ include "service-policy.serviceName" . }}
+          port: {{ .Values.target.service.port }}
+{{- end }}

@@ -1,0 +1,47 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: jenie-api-policy
+  namespace: jenie
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: ./charts/service-policy
+      sourceRef:
+        kind: GitRepository
+        name: flux2-sync
+        namespace: flux-system
+  install:
+    remediation: { retries: 3 }
+  upgrade:
+    # A second safety net underneath Flagger: if the release itself fails to
+    # apply, Helm reverts it. Flagger handles the case where it applies fine
+    # and then behaves badly.
+    remediation:
+      retries: 3
+      strategy: rollback
+  values:
+    target:
+      kind: Deployment
+      name: jenie-api
+      service:
+        port: 8000
+        targetPort: http
+      selector:
+        app.kubernetes.io/name: jenie-api
+    route:
+      enabled: true
+      gateway:
+        name: jenie
+        namespace: envoy-gateway-system
+        sectionName: http
+    networkPolicy:
+      enabled: true
+      allowTo:
+        - podSelector:
+            cnpg.io/cluster: jenie-pg
+          ports: [5432]
+    strategy:
+      type: RollingUpdate

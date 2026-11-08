@@ -1,0 +1,21 @@
+{{- /*
+  Rendered verbatim from values. The chart stays generic by knowing nothing
+  about what these measure; the consuming release ships its own and names
+  them in strategy.analysis.metrics.
+*/ -}}
+{{- range .Values.strategy.metricTemplates }}
+---
+apiVersion: flagger.app/v1beta1
+kind: MetricTemplate
+metadata:
+  name: {{ .name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "service-policy.labels" $ | nindent 4 }}
+spec:
+  provider:
+    type: {{ .provider | default "prometheus" }}
+    address: {{ .address | default "http://prometheus-operated.monitoring.svc:9090" }}
+  query: |
+    {{- tpl .query $ | nindent 4 }}
+{{- end }}

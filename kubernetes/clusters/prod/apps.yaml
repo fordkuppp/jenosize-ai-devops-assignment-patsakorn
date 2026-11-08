@@ -1,0 +1,24 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: apps
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: infra-configs
+  interval: 10m
+  timeout: 15m
+  path: ./kubernetes/apps/jenie/overlays/prod
+  prune: true
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: flux2-sync
+  # SOPS-encrypted manifests are decrypted with the age key Terraform seeded.
+  # Nothing in this repo is encrypted yet; wiring it now means the first
+  # secret added does not also require a Flux change.
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-age

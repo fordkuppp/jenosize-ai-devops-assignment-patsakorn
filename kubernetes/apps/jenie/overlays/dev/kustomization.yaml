@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: jenie
+resources:
+  - ../../base
+# dev takes the base as-is: one replica, RollingUpdate, stub LLM.
+# Deliberately no canary here — dev exists for fast feedback, and a 5-minute
+# analysis window on every push is the opposite of that. prod exercises the
+# progressive path, so CI covers both strategies across the two clusters.

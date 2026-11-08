@@ -1,0 +1,17 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jenie-config
+  namespace: jenie
+data:
+  LOG_LEVEL: "info"
+  EMBEDDING_MODEL: "BAAI/bge-small-en-v1.5"
+  EMBEDDING_DIM: "384"
+  CHUNK_SIZE: "512"
+  CHUNK_OVERLAP: "64"
+  RETRIEVAL_TOP_K: "5"
+  # Unset LLM_BASE_URL selects the deterministic stub, which is what CI uses:
+  # the pipeline must never need a GPU.
+  LLM_BASE_URL: ""
+  LLM_MODEL: "stub"

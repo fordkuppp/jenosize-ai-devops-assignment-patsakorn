@@ -1,0 +1,135 @@
+# Alerts that are NOT SLOs.
+#
+# Not everything worth alerting on is user-facing reliability with an error
+# budget. A stale index and a cost spike are operational signals: they have no
+# meaningful "ratio of good events", and forcing them into an SLO would
+# produce a burn rate that means nothing. Sloth owns the budget alerts; these
+# stay hand-written and say so.
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: jenie-operational
+  namespace: jenie
+  labels:
+    owner: platform
+spec:
+  groups:
+    - name: jenie.operational
+      rules:
+        # The indexer is a Job, so its failure is invisible to the API's
+        # health checks: /ask keeps answering, just from stale documents.
+        - alert: JenieIndexStale
+          expr: time() - rag_index_last_success_timestamp_seconds > 86400
+          for: 10m
+          labels:
+            severity: warning
+            category: freshness
+          annotations:
+            summary: Knowledge base has not been reindexed in over 24h
+            description: >-
+              /ask is still serving, but from documents last indexed
+              {{ $value | humanizeDuration }} ago.
+
+        - alert: JenieIndexEmpty
+          expr: rag_index_documents == 0
+          for: 5m
+          labels:
+            severity: critical
+            category: freshness
+          annotations:
+            summary: Vector store is empty — every answer will be a refusal
+
+        # Cost is a first-class signal for an LLM service; a prompt change or
+        # a retrieval regression that pulls more context shows up here long
+        # before it shows up on the invoice.
+        - alert: JenieCostPerRequestSpike
+          expr: |
+            (
+              sum(rate(rag_cost_usd_total[1h]))
+              / sum(rate(http_requests_total{handler="/ask"}[1h]))
+            )
+            >
+            2 * (
+              sum(rate(rag_cost_usd_total[24h]))
+              / sum(rate(http_requests_total{handler="/ask"}[24h]))
+            )
+          for: 30m
+          labels:
+            severity: warning
+            category: cost
+          annotations:
+            summary: Cost per request is more than 2x the 24h baseline
+
+        # Guardrail regression. A model or prompt change that makes the
+        # service refuse questions it used to answer returns 200s, fast —
+        # invisible to every latency and error-rate signal above.
+        - alert: JenieRefusalRateHigh
+          expr: |
+            sum(rate(rag_answers_total{outcome="refused"}[30m]))
+            / sum(rate(rag_answers_total[30m])) > 0.3
+          for: 15m
+          labels:
+            severity: warning
+            category: quality
+          annotations:
+            summary: Over 30% of answers are refusals
+            description: >-
+              Expected to be non-zero — refusing out-of-corpus questions is
+              correct behaviour. Sustained above 30% suggests retrieval or
+              prompt regression rather than user behaviour.
+
+    # Platform-level signals. Separate group because these watch the delivery
+    # and edge layers rather than the application — different runbooks, and a
+    # different person is likely to be fixing them.
+    - name: jenie.platform
+      rules:
+        # The blind spot every other alert here shares: they all measure
+        # requests. Zero healthy backends means zero requests, so error rate
+        # and latency both stay perfectly clean while the service is down.
+        # Absence of signal is the signal.
+        #
+        # TODO(verify): Envoy Gateway derives cluster names from the route
+        # ("httproute/<ns>/<name>/rule/<n>"). Confirm the actual label values
+        # with `curl <envoy-pod>:19001/stats/prometheus | grep membership`
+        # before trusting this — a selector that matches nothing produces an
+        # alert that never fires, which is worse than no alert at all.
+        - alert: JenieGatewayNoHealthyBackends
+          expr: |
+            sum by (envoy_cluster_name) (
+              envoy_cluster_membership_healthy{envoy_cluster_name=~"httproute/jenie/.*"}
+            ) == 0
+          for: 2m
+          labels:
+            severity: critical
+            category: availability
+          annotations:
+            summary: Envoy has no healthy backends for jenie
+            description: >-
+              The gateway is up and the SLO alerts are quiet because no
+              requests are reaching the application at all.
+
+        # A stalled canary is silent by design: Flagger keeps waiting, the
+        # stable version keeps serving, and nothing is broken — except that
+        # every subsequent deploy is now blocked behind it. The usual cause is
+        # the load-tester not generating traffic, so analysis never collects
+        # enough samples to pass or fail.
+        #
+        # TODO(verify): confirm the flagger_canary_status enum on first run
+        # (expected 0 = progressing, 1 = succeeded, 2 = failed).
+        - alert: JenieCanaryStuck
+          expr: flagger_canary_status{namespace="jenie"} == 0
+          for: 30m
+          labels:
+            severity: warning
+            category: delivery
+          annotations:
+            summary: Canary analysis has been running for over 30m
+            description: >-
+              Deploys are blocked. Check that flagger-loadtester is reachable
+              and that the webhook cmd targets the -canary service.
+
+        # Deliberately NOT defined here: an indexer job-failure alert.
+        # kube-prometheus-stack's KubeJobFailed already covers it, and a
+        # second rule on the same condition means two pages for one event and
+        # two silences to remember during an incident. One signal, one alert.

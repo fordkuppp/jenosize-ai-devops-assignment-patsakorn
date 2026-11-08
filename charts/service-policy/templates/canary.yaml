@@ -1,0 +1,63 @@
+{{- if eq (include "service-policy.flaggerManaged" .) "true" }}
+{{- $a := .Values.strategy.analysis }}
+apiVersion: flagger.app/v1beta1
+kind: Canary
+metadata:
+  name: {{ include "service-policy.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "service-policy.labels" . | nindent 4 }}
+spec:
+  provider: gatewayapi:v1
+  targetRef:
+    apiVersion: apps/v1
+    kind: {{ .Values.target.kind }}
+    name: {{ .Values.target.name }}
+  {{- if .Values.autoscaling.enabled }}
+  # Without this, the HPA keeps scaling the Deployment that Flagger has
+  # scaled to zero. Flagger retargets it to -primary instead.
+  autoscalerRef:
+    apiVersion: autoscaling/v2
+    kind: HorizontalPodAutoscaler
+    name: {{ include "service-policy.fullname" . }}
+  {{- end }}
+  progressDeadlineSeconds: {{ $a.progressDeadlineSeconds }}
+  service:
+    port: {{ .Values.target.service.port }}
+    targetPort: {{ .Values.target.service.targetPort }}
+    gatewayRefs:
+      - name: {{ .Values.route.gateway.name }}
+        namespace: {{ .Values.route.gateway.namespace }}
+    {{- with .Values.route.hostnames }}
+    hosts:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.route.timeouts }}
+    timeout: {{ .request }}
+    {{- end }}
+  analysis:
+    interval: {{ $a.interval }}
+    threshold: {{ $a.threshold }}
+    maxRetries: {{ $a.maxRetries }}
+    {{- if eq .Values.strategy.type "Canary" }}
+    stepWeight: {{ .Values.strategy.canary.stepWeight }}
+    maxWeight: {{ .Values.strategy.canary.maxWeight }}
+    stepWeightPromotion: {{ .Values.strategy.canary.stepWeightPromotion }}
+    {{- else if eq .Values.strategy.type "BlueGreen" }}
+    {{- /* No stepWeight: iterations alone makes Flagger hold at 0% and flip. */}}
+    iterations: {{ .Values.strategy.blueGreen.iterations }}
+    mirror: {{ .Values.strategy.blueGreen.mirror }}
+    {{- else if eq .Values.strategy.type "ABTest" }}
+    iterations: {{ .Values.strategy.abTest.iterations }}
+    match:
+      {{- toYaml .Values.strategy.abTest.match | nindent 6 }}
+    {{- end }}
+    {{- with $a.metrics }}
+    metrics:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with $a.webhooks }}
+    webhooks:
+      {{- tpl (toYaml .) $ | nindent 6 }}
+    {{- end }}
+{{- end }}
