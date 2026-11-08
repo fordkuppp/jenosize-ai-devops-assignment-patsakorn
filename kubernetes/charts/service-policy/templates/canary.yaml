@@ -37,8 +37,10 @@ spec:
     {{- end }}
   analysis:
     interval: {{ $a.interval }}
+    # threshold is the number of failed checks before rollback. Flagger has
+    # no separate retry count — an earlier `maxRetries` here was invented and
+    # rejected server-side with "field not declared in schema".
     threshold: {{ $a.threshold }}
-    maxRetries: {{ $a.maxRetries }}
     {{- if eq .Values.strategy.type "Canary" }}
     stepWeight: {{ .Values.strategy.canary.stepWeight }}
     maxWeight: {{ .Values.strategy.canary.maxWeight }}

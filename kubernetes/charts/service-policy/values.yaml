@@ -132,7 +132,6 @@ strategy:
   analysis:
     interval: 30s
     threshold: 5            # failed checks before automatic rollback
-    maxRetries: 3
     progressDeadlineSeconds: 600
 
     metrics:
