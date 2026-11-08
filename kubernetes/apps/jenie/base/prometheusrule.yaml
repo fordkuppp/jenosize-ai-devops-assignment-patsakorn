@@ -89,11 +89,11 @@ spec:
         # and latency both stay perfectly clean while the service is down.
         # Absence of signal is the signal.
         #
-        # TODO(verify): Envoy Gateway derives cluster names from the route
-        # ("httproute/<ns>/<name>/rule/<n>"). Confirm the actual label values
-        # with `curl <envoy-pod>:19001/stats/prometheus | grep membership`
-        # before trusting this — a selector that matches nothing produces an
-        # alert that never fires, which is worse than no alert at all.
+        # Label format verified against a running proxy:
+        #   envoy_cluster_membership_healthy{
+        #     envoy_cluster_name="httproute/jenie/jenie-api/rule/0"} 0
+        # One cluster per HTTPRoute rule, so the regex has to stay a prefix
+        # match rather than an exact one.
         - alert: JenieGatewayNoHealthyBackends
           expr: |
             sum by (envoy_cluster_name) (
