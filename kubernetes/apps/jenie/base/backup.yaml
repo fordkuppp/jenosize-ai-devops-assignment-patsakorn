@@ -40,7 +40,12 @@ spec:
   # Six fields: CNPG uses the seconds-resolution cron format, so the usual
   # five-field string silently means something else.
   schedule: "0 0 2 * * *"
-  immediate: true
+  # Deliberately not `immediate: true`. On a cold start the first backup
+  # fires before the plugin has registered with the operator and fails with
+  # "requested plugin is not available", leaving a failed Backup object that
+  # trips the staleness alerting on every fresh cluster. WAL archiving is
+  # already running by then, so nothing is unprotected in the gap — and an
+  # on-demand Backup is one `kubectl apply` when you want one sooner.
   backupOwnerReference: self
   method: plugin
   pluginConfiguration:
