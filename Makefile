@@ -63,6 +63,29 @@ export TF_VAR_image_automation_deploy_key = $(if $(wildcard $(DEPLOY_KEY)),$(fil
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n",$$1,$$2}'
 
+.PHONY: doctor
+doctor: ## Check the toolchain before anything else wastes your time
+	@missing=0; \
+	for t in docker kind terraform helm kustomize kubectl age-keygen sops; do \
+	  if command -v $$t >/dev/null 2>&1; then \
+	    printf '  \033[32m✓\033[0m %-12s %s\n' "$$t" "$$(command -v $$t)"; \
+	  else \
+	    printf '  \033[31m✗\033[0m %-12s not found\n' "$$t"; missing=1; \
+	  fi; \
+	done; \
+	docker info >/dev/null 2>&1 \
+	  && printf '  \033[32m✓\033[0m %-12s daemon reachable\n' "docker-daemon" \
+	  || { printf '  \033[31m✗\033[0m %-12s daemon not reachable\n' "docker-daemon"; missing=1; }; \
+	free=$$(awk '/MemAvailable/ {printf "%d", $$2/1024/1024}' /proc/meminfo 2>/dev/null || echo 99); \
+	if [ "$$free" -lt 6 ]; then \
+	  printf '  \033[33m!\033[0m %-12s %sGB available — one cluster wants ~4GB\n' "memory" "$$free"; \
+	else \
+	  printf '  \033[32m✓\033[0m %-12s %sGB available\n' "memory" "$$free"; \
+	fi; \
+	echo; \
+	[ "$$missing" = "0" ] && echo "  ready: make bootstrap && make images && make up-dev" \
+	  || { echo "  install what is missing above, then re-run make doctor"; exit 1; }
+
 .PHONY: bootstrap
 bootstrap: ## Generate the SOPS age key and pin GitHub's SSH host key
 	@mkdir -p .secrets

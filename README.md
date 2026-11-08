@@ -65,8 +65,23 @@ a debugging tool, not a deployment tool.
 
 ## Run it
 
-Prerequisites: `docker`, `kind`, `terraform`, `helm`, `kustomize`, `age`,
-`sops`, `kubectl`.
+```sh
+make doctor          # check the toolchain before anything else wastes your time
+```
+
+Needs `docker`, `kind`, `terraform`, `helm`, `kustomize`, `kubectl`, `age`
+and `sops`, plus about 4GB free for one cluster. `make doctor` reports
+exactly what is missing and exits non-zero.
+
+> **There is no `docker compose up` path, deliberately.** The brief offers
+> compose as an alternative to a deployed URL, and it would be the faster
+> thing to hand a reviewer. It is not here because it would be a *second
+> definition of the system* — one that drifts from this one and exercises
+> none of what makes it interesting: Gateway API routing, Flagger analysis,
+> generated SLO alerts, CloudNativePG failover and backups. A compose file
+> that demonstrates none of those, while claiming to be the same service,
+> is worse than the three minutes `make up-dev` costs.
+> See [`docs/decisions.md`](docs/decisions.md).
 
 ```sh
 make bootstrap       # once: generate the SOPS age key, pin GitHub's host key

@@ -221,13 +221,41 @@ answer anything.
 
 - **No Grafana dashboard.** The brief lists one. Metrics, alerts and
   recording rules exist; the visualisation does not.
-- **No `docker compose up` path.** The brief offers it as an alternative to a
-  deployed URL and its "what great looks like" list opens with it. `make
-  up-dev` is a third thing — more capable, and more to install.
 - **CI does not build or deploy images.** It lints, tests, scans and
   validates. There is no image build job and no end-to-end job.
 - **The LLM has never been real.** vLLM behind `LLM_BASE_URL` would need no
   code change, and has not been demonstrated.
+
+---
+
+## No docker-compose path
+
+**Decision.** `make up-dev` is the only way to run this. There is no
+`docker compose up`.
+
+**Why.** The brief offers compose as an alternative to a deployed URL, and
+its "what great looks like" list opens with it, so this is a deliberate
+deviation rather than an oversight.
+
+A compose file would be a second definition of the same system. It would
+drift from the manifests within a week, and — more to the point — it would
+exercise none of what this repository is actually about: Gateway API
+routing, Flagger canary analysis, SLO alerts generated from declared
+objectives, CloudNativePG failover, WAL archiving. A reviewer running it
+would see a FastAPI service talking to Postgres and would learn nothing
+about the platform.
+
+The single-source-of-truth claim is the main thing being demonstrated here.
+Maintaining a parallel runtime definition contradicts it.
+
+**Cost.** Eight tools and roughly three minutes instead of one command and
+thirty seconds. Mitigated with `make doctor`, which checks the toolchain,
+the Docker daemon and available memory, and exits non-zero naming exactly
+what is missing.
+
+**If this were a product** rather than an assessment, compose would be worth
+having for contributor onboarding — and it would be generated from the
+manifests, not hand-maintained beside them.
 
 ---
 
