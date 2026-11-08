@@ -22,3 +22,7 @@ __pycache__/
 
 # Local env
 .env
+
+# Holding area while the infra layer is built. Nothing here ships —
+# empty it or wire it back in before submitting.
+temp/
