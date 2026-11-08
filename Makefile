@@ -79,13 +79,30 @@ up-prod: ## Create the prod cluster and bootstrap Flux
 	  terraform -chdir=$(TF_PROD)/$$s apply -auto-approve || exit 1; \
 	done
 
+# Nothing stage 2 creates outlives the cluster, so uninstalling Helm releases
+# before deleting it is pure waste — and flux2's CRD finalizers make that
+# uninstall hang for minutes while kustomize-controller argues with resources
+# that are about to cease existing. Forget stage 2's state, then delete the
+# cluster; the resources go with it.
+#
+# This is only safe because stage 2 targets a disposable cluster. Against a
+# long-lived one, `state rm` without a real destroy orphans infrastructure.
+define teardown
+	@echo "==> forgetting platform state"
+	@addrs=$$(terraform -chdir=$(1)/2-platform state list 2>/dev/null); \
+	  if [ -n "$$addrs" ]; then \
+	    terraform -chdir=$(1)/2-platform state rm $$addrs >/dev/null && \
+	    echo "    dropped $$(echo "$$addrs" | wc -l) resources from state"; \
+	  else echo "    nothing in state"; fi
+	@echo "==> destroying cluster"
+	terraform -chdir=$(1)/1-cluster destroy -auto-approve
+endef
+
 .PHONY: down-dev down-prod
-down-dev: ## Destroy the dev cluster (reverse stage order)
-	-terraform -chdir=$(TF_DEV)/2-platform destroy -auto-approve
-	terraform -chdir=$(TF_DEV)/1-cluster destroy -auto-approve
-down-prod: ## Destroy the prod cluster (reverse stage order)
-	-terraform -chdir=$(TF_PROD)/2-platform destroy -auto-approve
-	terraform -chdir=$(TF_PROD)/1-cluster destroy -auto-approve
+down-dev: ## Destroy the dev cluster
+	$(call teardown,$(TF_DEV))
+down-prod: ## Destroy the prod cluster
+	$(call teardown,$(TF_PROD))
 
 .PHONY: images
 images: ## Build infra images and side-load them (kind has no registry)
