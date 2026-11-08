@@ -5,12 +5,37 @@
 #   make images      build and side-load images (kind has no registry)
 #   make validate    everything CI checks, locally
 #
+# Cluster-facing targets take ENV (default dev):
+#
+#   make status ENV=prod
+#   make reconcile          pull git now instead of waiting for the interval
+#   make smoke              is the gateway answering
+#   make logs C=source-controller
+#
 SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := help
 
 TF_DEV  := infrastructure/terraform/envs/dev
 TF_PROD := infrastructure/terraform/envs/prod
 STAGES  := 1-cluster 2-platform
+
+# Which cluster the cluster-facing targets talk to.
+ENV ?= dev
+
+# Derived from the repo, never inherited from the shell. This is a safety
+# property, not a convenience: without it `make status` runs against whatever
+# context happens to be current — which on a machine with a real homelab
+# cluster means a repo-local command quietly talking to production.
+KUBECONFIG_PATH := $(CURDIR)/infrastructure/terraform/envs/$(ENV)/1-cluster/.kube/config
+export KUBECONFIG := $(KUBECONFIG_PATH)
+
+# kind maps the gateway NodePort to a different host port per env so the two
+# clusters can run side by side.
+ifeq ($(ENV),prod)
+GATEWAY_URL := http://localhost
+else
+GATEWAY_URL := http://localhost:8080
+endif
 
 # Four root modules share one provider download. Also a workaround with a
 # second purpose: the registry serves provider checksums from GitHub release
@@ -95,10 +120,66 @@ validate: ## Everything CI checks: terraform, helm, kustomize
 	  echo "  build  $$d"; kustomize build $$d >/dev/null || exit 1; \
 	done
 
+# Every cluster-facing target depends on this. It fails loudly rather than
+# falling through to the ambient context.
+.PHONY: guard
+guard:
+	@test -f "$(KUBECONFIG_PATH)" || { \
+	  echo "no kubeconfig at $(KUBECONFIG_PATH)"; \
+	  echo "the ENV=$(ENV) cluster does not exist — run: make up-$(ENV)"; \
+	  echo; \
+	  echo "not falling back to your current context on purpose: that is how"; \
+	  echo "a command in this repo ends up talking to a cluster you care about."; \
+	  exit 1; }
+
+.PHONY: kubeconfig
+kubeconfig: guard ## Print the export line for this ENV's cluster
+	@echo "export KUBECONFIG=$(KUBECONFIG_PATH)"
+
 .PHONY: status
-status: ## What Flux thinks of the world
-	flux get all -A
+status: guard ## Flux and workload status for ENV (default dev)
+	@echo "context: $$(kubectl config current-context)"
+	@echo
+	@flux get all -A
+
+.PHONY: reconcile
+reconcile: guard ## Pull git now instead of waiting out the sync interval
+	@# The loop that should have been used instead of `kubectl apply -k`
+	@# during debugging: ~15s, and it cannot leave the cluster holding state
+	@# that is not in the repo.
+	flux reconcile source git flux2-sync
+	flux reconcile kustomization infra-controllers
+	flux reconcile kustomization infra-configs
+	-flux reconcile kustomization apps
+
+.PHONY: smoke
+smoke: guard ## Is the gateway answering, and is it programmed?
+	@printf 'GET %s/  -> ' '$(GATEWAY_URL)'
+	@curl -sS -o /dev/null -w 'HTTP %{http_code}\n' --max-time 8 '$(GATEWAY_URL)/' \
+	  || echo '(no answer — check `make status` and the Gateway below)'
+	@echo
+	@kubectl get gateway -A
+	@echo
+	@kubectl -n envoy-gateway-system get svc -l gateway.envoyproxy.io/owning-gateway-name=external 2>/dev/null \
+	  || kubectl -n envoy-gateway-system get svc
+
+.PHONY: logs
+logs: guard ## Tail a controller: make logs C=source-controller [ENV=prod]
+	@case "$(C)" in \
+	  ""|source-controller|kustomize-controller|helm-controller|notification-controller|image-automation-controller|image-reflector-controller) \
+	    kubectl -n flux-system logs -l "app=$${C:-source-controller}" --tail=100 -f ;; \
+	  envoy-gateway) kubectl -n envoy-gateway-system logs -l control-plane=envoy-gateway --tail=100 -f ;; \
+	  envoy)         kubectl -n envoy-gateway-system logs -l gateway.envoyproxy.io/owning-gateway-name=external -c envoy --tail=100 -f ;; \
+	  flagger)       kubectl -n flagger-system logs -l app.kubernetes.io/name=flagger --tail=100 -f ;; \
+	  sloth)         kubectl -n sloth logs -l app.kubernetes.io/name=sloth --tail=100 -f ;; \
+	  cnpg)          kubectl -n cnpg-system logs -l app.kubernetes.io/name=cloudnative-pg --tail=100 -f ;; \
+	  *) echo "unknown component '$(C)'"; exit 1 ;; \
+	esac
 
 .PHONY: canary
-canary: ## Watch the prod canary progress
+canary: guard ## Watch canary rollouts (prod runs the progressive strategy)
 	kubectl -n jenie get canary -w
+
+.PHONY: events
+events: guard ## Recent warnings, newest last — usually says why something is stuck
+	kubectl get events -A --field-selector type=Warning --sort-by=.lastTimestamp 2>/dev/null | tail -25
