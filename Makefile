@@ -43,7 +43,15 @@ endif
 # one flaky dependency into four.
 export TF_PLUGIN_CACHE_DIR := $(CURDIR)/.terraform-cache
 REGISTRY ?= ghcr.io/fordkuppp
-TAG ?= v0.1.0
+# Image tags are read back out of the manifests rather than fixed here.
+# Flux's image automation rewrites those manifests when it promotes a build,
+# so a hardcoded default drifts the moment a canary succeeds — and because
+# these images are side-loaded and never pushed, the cluster would then ask
+# for a tag that exists nowhere. Deriving keeps a from-scratch rebuild honest.
+# `make images TAG=v0.1.7` overrides both for cutting a new build.
+TAG ?=
+API_TAG := $(if $(TAG),$(TAG),$(shell sed -n 's#.*jenie-api:\([^ ]*\).*#\1#p' kubernetes/apps/jenie/base/api.yaml | head -1))
+IDX_TAG := $(if $(TAG),$(TAG),$(shell sed -n 's#.*jenie-indexer:\([^ ]*\).*#\1#p' kubernetes/apps/jenie/base/indexer.yaml | head -1))
 
 # $(file <...), not $(shell cat ...).
 #
@@ -139,15 +147,15 @@ down-prod: ## Destroy the prod cluster
 
 .PHONY: images
 images: ## Build images and side-load them (kind has no registry)
-	docker build -t $(REGISTRY)/jenie-api:$(TAG) -f api/Dockerfile .
-	docker build -t $(REGISTRY)/jenie-indexer:$(TAG) -f worker/Dockerfile .
+	docker build -t $(REGISTRY)/jenie-api:$(API_TAG) -f api/Dockerfile .
+	docker build -t $(REGISTRY)/jenie-indexer:$(IDX_TAG) -f worker/Dockerfile .
 	docker build -t $(REGISTRY)/postgres-pgvector:17 infrastructure/images/postgres-pgvector
 	@for c in jenie-dev jenie-prod; do \
 	  kind get clusters | grep -qx $$c || continue; \
 	  echo "==> loading into $$c"; \
 	  kind load docker-image --name $$c \
-	    $(REGISTRY)/jenie-api:$(TAG) \
-	    $(REGISTRY)/jenie-indexer:$(TAG) \
+	    $(REGISTRY)/jenie-api:$(API_TAG) \
+	    $(REGISTRY)/jenie-indexer:$(IDX_TAG) \
 	    $(REGISTRY)/postgres-pgvector:17; \
 	done
 

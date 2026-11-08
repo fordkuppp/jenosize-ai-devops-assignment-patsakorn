@@ -7,7 +7,11 @@ metadata:
   labels:
     app.kubernetes.io/name: jenie-indexer
 spec:
-  backoffLimit: 3
+  # Six, not three: the Job is applied in the same reconcile as the CNPG
+  # cluster, and a Job that exhausts its backoff is dead for good — Flux will
+  # not recreate one whose manifest has not changed. The initContainer below
+  # removes the race; the extra retries cover everything it cannot.
+  backoffLimit: 6
   activeDeadlineSeconds: 1800
   ttlSecondsAfterFinished: 3600
   template:
@@ -17,6 +21,29 @@ spec:
     spec:
       restartPolicy: OnFailure
       automountServiceAccountToken: false
+      initContainers:
+        # Wait for Postgres to accept connections rather than racing it.
+        # Uses the pgvector image because it is already on every node and
+        # carries pg_isready; pulling a separate wait image would reintroduce
+        # the very failure this guards against.
+        - name: wait-for-pg
+          image: ghcr.io/fordkuppp/postgres-pgvector:17
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h jenie-pg-rw -p 5432 -d jenie -t 5; do
+                echo "waiting for jenie-pg-rw"
+                sleep 5
+              done
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 100m, memory: 64Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
