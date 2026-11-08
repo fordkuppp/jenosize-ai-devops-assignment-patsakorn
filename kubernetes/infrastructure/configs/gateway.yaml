@@ -59,13 +59,22 @@ spec:
           type: StrategicMerge
           value:
             spec:
+              # Envoy Gateway defaults this to Local to preserve client IPs.
+              # In kind that silently breaks the data plane: with Local, a node
+              # only answers the NodePort if it hosts an endpoint, and the host
+              # port mappings live on the control-plane while the proxy pod is
+              # scheduled on a worker. Packets arrive at a node with no local
+              # endpoint and are dropped — a timeout, not a refusal, so it
+              # looks like a networking problem rather than a policy one.
+              # Client IP preservation is meaningless behind a kind port map.
+              externalTrafficPolicy: Cluster
               ports:
-                # TODO(verify): Envoy Gateway derives the port name from the
-                # listener as "<protocol>-<port>". Confirm against
-                # `kubectl -n envoy-gateway-system get svc -o yaml` on first
-                # apply — a name mismatch makes this patch a no-op and leaves
-                # the NodePort random, which fails silently.
-                - name: http-80
+                # A Service's ports list declares `port` as its strategic
+                # merge key, so an entry without it cannot be matched to the
+                # generated port and Envoy Gateway rejects the whole service:
+                #   does not contain declared merge key: port
+                # The value must equal the Gateway listener's port above.
+                - port: 80
                   nodePort: 30080
   telemetry:
     metrics:
