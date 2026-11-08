@@ -15,7 +15,14 @@ spec:
     initdb:
       database: jenie
       owner: jenie
-      postInitSQL:
+      # postInitApplicationSQL, NOT postInitSQL.
+      #
+      # CNPG runs postInitSQL against the `postgres` database and
+      # postInitApplicationSQL against the application database. Using the
+      # first creates the extension somewhere the application never connects,
+      # and the failure surfaces much later as `type "vector" does not exist`
+      # — which looks like a broken image rather than a misplaced hook.
+      postInitApplicationSQL:
         - CREATE EXTENSION IF NOT EXISTS vector
   # CNPG generates and rotates the credentials and publishes them as
   # <cluster>-app. Terraform deliberately does not create a database password:
